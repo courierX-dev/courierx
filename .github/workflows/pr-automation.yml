@@ -1,0 +1,63 @@
+name: PR Automation
+
+on:
+  schedule:
+    # Run twice daily at 9 AM and 5 PM UTC
+    - cron: '0 9,17 * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'auto-merge'
+        type: choice
+        options:
+          - auto-merge
+          - close-stale
+          - cleanup
+          - status
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  pr-automation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup GitHub CLI
+        run: |
+          # GitHub CLI is pre-installed on GitHub runners
+          gh --version
+
+      - name: Make script executable
+        run: chmod +x scripts/pr-manager.sh
+
+      - name: Run PR automation
+        run: |
+          case "${{ github.event.inputs.action || 'auto-merge' }}" in
+            "auto-merge")
+              ./scripts/pr-manager.sh auto-merge
+              ;;
+            "close-stale")
+              ./scripts/pr-manager.sh close-stale 45
+              ;;
+            "cleanup")
+              ./scripts/pr-manager.sh cleanup 21
+              ;;
+            "status")
+              ./scripts/pr-manager.sh status
+              ;;
+          esac
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create summary
+        run: |
+          echo "## PR Automation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Action performed: ${{ github.event.inputs.action || 'auto-merge' }}" >> $GITHUB_STEP_SUMMARY
+          echo "Timestamp: $(date)" >> $GITHUB_STEP_SUMMARY

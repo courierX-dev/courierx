@@ -15,6 +15,13 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    # Auto-merge patch and minor updates
+    allow:
+      - dependency-type: "direct"
+        update-type: "version-update:semver-patch"
+      - dependency-type: "direct"
+        update-type: "version-update:semver-minor"
+      - dependency-type: "indirect"
 
   # API package
   - package-ecosystem: "npm"
