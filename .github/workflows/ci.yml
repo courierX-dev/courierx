@@ -60,6 +60,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Type check
         run: pnpm typecheck
 
@@ -68,9 +71,6 @@ jobs:
 
       - name: Format check
         run: pnpm format --check || echo "Format check skipped - will be enforced in future"
-
-      - name: Generate Prisma client
-        run: pnpm db:generate
 
       - name: Validate Prisma schema
         run: pnpm --filter @courierx/api prisma validate
