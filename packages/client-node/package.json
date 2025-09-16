@@ -1,0 +1,49 @@
+{
+    "name": "@courierx/client",
+    "version": "1.0.0",
+    "description": "Node.js client for CourierX API",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/courierX-dev/courierx.git",
+        "directory": "packages/client-node"
+    },
+    "keywords": [
+        "email",
+        "courierx",
+        "client",
+        "sdk",
+        "api",
+        "typescript",
+        "nodejs"
+    ],
+    "author": "CourierX Team",
+    "license": "MIT",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "test": "vitest",
+        "lint": "eslint src --ext .ts",
+        "format": "prettier --write src",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@courierx/shared": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "eslint": "^8.56.0",
+        "@typescript-eslint/eslint-plugin": "^6.19.0",
+        "@typescript-eslint/parser": "^6.19.0",
+        "prettier": "^3.2.4",
+        "typescript": "^5.3.3",
+        "vitest": "^1.2.0"
+    }
+}

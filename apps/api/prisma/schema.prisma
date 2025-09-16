@@ -1,0 +1,275 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProviderType {
+  sendgrid
+  ses
+  mailgun
+  smtp
+  resend
+  postmark
+  mock
+}
+
+enum ProviderRole {
+  primary
+  secondary
+}
+
+enum EventKind {
+  queued
+  sent
+  bounce
+  complaint
+  dropped
+  retry
+  open
+  click
+  reject
+  deferred
+}
+
+enum MemberRole {
+  owner
+  admin
+  developer
+  viewer
+}
+
+model Tenant {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  plan          String   @default("free")
+  createdAt     DateTime @default(now())
+  products      Product[]
+  providers     ProviderAccount[]
+  domains       SendingDomain[]
+  messages      Message[]
+  events        Event[]
+  webhookEvents WebhookEvent[]
+  suppression   Suppression[]
+  members       TenantMember[]
+  auditLogs     AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  emailNorm   String
+  emailHash   Bytes
+  displayName String?
+  createdAt   DateTime @default(now())
+  memberships TenantMember[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model TenantMember {
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  role      MemberRole @default(developer)
+  createdAt DateTime   @default(now())
+
+  @@id([tenantId, userId])
+  @@map("tenant_members")
+}
+
+model Product {
+  id              String       @id @default(uuid())
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId        String
+  name            String
+  slug            String
+  defaultFrom     String
+  primaryProvider ProviderType @default(ses)
+  ratePerHour     Int          @default(50)
+  isWarming       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  apiKeys         ApiKey[]
+  routes          Route[]
+  templates       Template[]
+  messages        Message[]
+  events          Event[]
+  webhookEvents   WebhookEvent[]
+  suppression     Suppression[]
+  domains         SendingDomain[]
+  rateUsage       RateUsageHourly[]
+
+  @@unique([tenantId, slug])
+  @@map("products")
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  name      String   @default("default")
+  keyHash   Bytes
+  hmacHash  Bytes?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([productId, name])
+  @@map("api_keys")
+}
+
+model ProviderAccount {
+  id          String       @id @default(uuid())
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId    String
+  type        ProviderType
+  credsCipher Bytes?
+  credsMeta   Json?
+  enabled     Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  routes      Route[]
+
+  @@unique([tenantId, type], map: "uq_provider_per_type_per_tenant")
+  @@map("provider_accounts")
+}
+
+model Route {
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId  String
+  provider   ProviderAccount @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  providerId String
+  role       ProviderRole    @default(secondary)
+  sticky     Boolean         @default(true)
+  priority   Int             @default(100)
+  createdAt  DateTime        @default(now())
+
+  @@id([productId, providerId])
+  @@map("routes")
+}
+
+model SendingDomain {
+  id            String   @id @default(uuid())
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId      String
+  product       Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId     String?
+  domain        String
+  spfStatus     String   @default("unknown")
+  dkimStatus    String   @default("unknown")
+  dmarcStatus   String   @default("unknown")
+  trackingCname String?
+  createdAt     DateTime @default(now())
+
+  @@unique([tenantId, domain])
+  @@map("sending_domains")
+}
+
+model Template {
+  id         String   @id @default(uuid())
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId  String
+  name       String
+  engine     String   @default("hbs")
+  subjectTpl String
+  htmlTpl    String
+  createdAt  DateTime @default(now())
+
+  @@unique([productId, name])
+  @@map("templates")
+}
+
+model Message {
+  id           String        @id @default(uuid())
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId     String
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String
+  toEmail      String
+  toNorm       String
+  toHash       Bytes
+  subject      String
+  bodyKind     String        @default("html")
+  providerUsed ProviderType?
+  requestJson  Json?
+  createdAt    DateTime      @default(now())
+  events       Event[]
+
+  @@map("messages")
+}
+
+model Event {
+  id        BigInt        @id @default(autoincrement())
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  message   Message?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  messageId String?
+  email     String?
+  event     EventKind
+  provider  ProviderType?
+  metaJson  Json?
+  createdAt DateTime      @default(now())
+
+  @@map("events")
+}
+
+model WebhookEvent {
+  id        BigInt        @id @default(autoincrement())
+  tenant    Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantId  String?
+  product   Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId String?
+  provider  ProviderType?
+  payload   Json
+  createdAt DateTime      @default(now())
+
+  @@map("webhook_events")
+}
+
+model Suppression {
+  id        BigInt   @id @default(autoincrement())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String?
+  email     String
+  emailNorm String
+  emailHash Bytes
+  reason    String
+  source    String
+  createdAt DateTime @default(now())
+
+  @@unique([productId, emailHash])
+  @@map("suppression")
+}
+
+model RateUsageHourly {
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   String
+  bucketStart DateTime
+  count       Int      @default(0)
+
+  @@id([productId, bucketStart])
+  @@map("rate_usage_hourly")
+}
+
+model AuditLog {
+  id          BigInt   @id @default(autoincrement())
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantId    String?
+  actorUser   User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorUserId String?
+  action      String
+  target      Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}

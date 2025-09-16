@@ -1,0 +1,26 @@
+api.courierx.dev {
+    reverse_proxy api:3000
+    
+    # Rate limiting
+    rate_limit {
+        zone static_rl {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+    
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+    
+    # Logging
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+}
