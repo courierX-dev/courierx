@@ -14,8 +14,8 @@ export function normalizeAndHashEmail(email: string): { norm: string; hash: Buff
  * Prisma middleware to automatically handle PII fields
  * Automatically populates emailNorm and emailHash fields when email is provided
  */
-export function createPIIMiddleware(): Prisma.Middleware {
-    return async (params, next) => {
+export function createPIIMiddleware() {
+    return async (params: any, next: any) => {
         // Handle User model email fields
         if (params.model === 'User' && (params.action === 'create' || params.action === 'update')) {
             if (params.args.data?.email) {

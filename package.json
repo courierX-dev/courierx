@@ -24,7 +24,12 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "turbo run build && changeset publish",
-    "publish-packages": "pnpm build && pnpm changeset publish"
+    "publish-packages": "pnpm build && pnpm changeset publish",
+    "pr:list": "./scripts/pr-manager.sh list",
+    "pr:auto-merge": "./scripts/pr-manager.sh auto-merge",
+    "pr:status": "./scripts/pr-manager.sh status",
+    "pr:cleanup": "./scripts/pr-manager.sh cleanup",
+    "pr:close-stale": "./scripts/pr-manager.sh close-stale"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
