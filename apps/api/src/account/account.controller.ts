@@ -1,6 +1,7 @@
 import { Controller, Get, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { ApiKeyGuard } from '../auth/api-key.guard';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Account')
 @Controller('v1')
@@ -8,6 +9,7 @@ import { ApiKeyGuard } from '../auth/api-key.guard';
 @ApiBearerAuth('bearer')
 @ApiSecurity('x-api-key')
 export class AccountController {
+    constructor(private prisma: PrismaService) {}
     @Get('me')
     @ApiOperation({
         summary: 'Get account information',
@@ -77,16 +79,26 @@ This endpoint is useful for validating API keys and understanding account limits
     async getMe(@Req() req: any) {
         const { apiKey, product, tenant } = req;
 
-        // Calculate current hour usage
+        // Calculate current hour bucket
         const currentHour = new Date();
         currentHour.setMinutes(0, 0, 0);
 
         const nextHour = new Date(currentHour);
         nextHour.setHours(nextHour.getHours() + 1);
 
-        // Note: In a real implementation, you'd fetch actual usage from the database
-        const currentUsage = 0; // This would come from rate usage tracking
-        const remaining = Math.max(0, product.rateLimitPerHour - currentUsage);
+        // Fetch actual usage from RateUsageHourly table
+        const rateUsage = await this.prisma.rateUsageHourly.findUnique({
+            where: {
+                productId_bucketStart: {
+                    productId: product.id,
+                    bucketStart: currentHour,
+                },
+            },
+        });
+
+        const currentUsage = rateUsage?.count || 0;
+        const rateLimit = product.ratePerHour || 50;
+        const remaining = Math.max(0, rateLimit - currentUsage);
 
         return {
             apiKey: {
@@ -100,7 +112,7 @@ This endpoint is useful for validating API keys and understanding account limits
                 id: product.id,
                 name: product.name,
                 status: product.status,
-                rateLimitPerHour: product.rateLimitPerHour,
+                rateLimitPerHour: rateLimit,
             },
             tenant: {
                 id: tenant.id,

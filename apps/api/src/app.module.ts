@@ -8,6 +8,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { AuthModule } from './auth/auth.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { AccountModule } from './account/account.module';
+import { MessagesModule } from './messages/messages.module';
+import { TemplatesModule } from './templates/templates.module';
 
 @Module({
     imports: [
@@ -26,6 +28,8 @@ import { AccountModule } from './account/account.module';
         SendModule,
         WebhooksModule,
         AccountModule,
+        MessagesModule,
+        TemplatesModule,
     ],
 })
 export class AppModule { }
