@@ -1,0 +1,49 @@
+source "https://rubygems.org"
+
+gem "rails", "~> 8.1.1"
+gem "pg", "~> 1.1"
+gem "puma", ">= 5.0"
+
+# Authentication & Authorization
+gem "bcrypt", "~> 3.1"
+gem "jwt", "~> 2.7"
+
+# CORS
+gem "rack-cors"
+
+# Background Jobs
+gem "sidekiq", "~> 7.2"
+
+# HTTP Client (for calling Go Core)
+gem "faraday", "~> 2.8"
+
+# Environment Variables
+gem "dotenv", groups: [:development, :test]
+
+# Rate Limiting
+gem "rack-attack"
+
+# Database-backed adapters
+gem "solid_cache"
+gem "solid_queue"
+gem "solid_cable"
+
+# Boot optimization
+gem "bootsnap", require: false
+
+# Deployment
+gem "kamal", require: false
+gem "thruster", require: false
+
+# Asset processing
+gem "image_processing", "~> 1.2"
+
+# Windows timezone support
+gem "tzinfo-data", platforms: %i[ windows jruby ]
+
+group :development, :test do
+  gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
+  gem "bundler-audit", require: false
+  gem "brakeman", require: false
+  gem "rubocop-rails-omakase", require: false
+end

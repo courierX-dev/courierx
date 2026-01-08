@@ -1,0 +1,57 @@
+# Testing & Development Gems
+# Add these to your main Gemfile in the appropriate groups
+
+group :test do
+  # Testing Framework
+  gem 'rspec-rails', '~> 6.1'
+  gem 'factory_bot_rails', '~> 6.4'
+  gem 'faker', '~> 3.2'
+
+  # Test Database
+  gem 'database_cleaner-active_record', '~> 2.1'
+
+  # Mocking & Stubbing
+  gem 'webmock', '~> 3.19'
+  gem 'vcr', '~> 6.2'
+
+  # Code Coverage
+  gem 'simplecov', '~> 0.22', require: false
+  gem 'simplecov-json', '~> 0.2', require: false
+
+  # Performance Testing
+  gem 'benchmark-ips', '~> 2.13'
+  gem 'ruby-prof', '~> 1.6'
+
+  # Request Testing
+  gem 'shoulda-matchers', '~> 6.0'
+  gem 'json_matchers', '~> 0.11'
+end
+
+group :development, :test do
+  # Debugging
+  gem 'pry-byebug', '~> 3.10'
+  gem 'pry-rails', '~> 0.3'
+
+  # Linting
+  gem 'rubocop', '~> 1.59', require: false
+  gem 'rubocop-rails', '~> 2.23', require: false
+  gem 'rubocop-rspec', '~> 2.26', require: false
+  gem 'rubocop-performance', '~> 1.20', require: false
+
+  # Security Scanning
+  gem 'brakeman', '~> 6.1', require: false
+  gem 'bundler-audit', '~> 0.9', require: false
+end
+
+group :development do
+  # Better errors
+  gem 'better_errors', '~> 2.10'
+  gem 'binding_of_caller', '~> 1.0'
+
+  # Database annotations
+  gem 'annotate', '~> 3.2'
+
+  # Spring for faster boot
+  gem 'spring'
+  gem 'spring-commands-rspec'
+end
