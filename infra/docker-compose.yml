@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: courierx-postgres
+    environment:
+      POSTGRES_DB: courierx
+      POSTGRES_USER: courierx
+      POSTGRES_PASSWORD: courierx_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U courierx"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - courierx-network
+
+  # Redis (for queues and caching)
+  redis:
+    image: redis:7-alpine
+    container_name: courierx-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - courierx-network
+
+  # Rails Control Plane
+  control-plane:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.rails
+    container_name: courierx-control-plane
+    environment:
+      DATABASE_URL: postgresql://courierx:courierx_dev_password@postgres:5432/courierx
+      REDIS_URL: redis://redis:6379/0
+      RAILS_ENV: development
+      PORT: 4000
+      GO_CORE_URL: http://core-go:8080
+      GO_CORE_SECRET: dev-shared-secret
+      JWT_SECRET: dev-jwt-secret
+      ENCRYPTION_KEY: dev-encryption-key-32-chars!!!
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../control-plane:/app
+      - rails_bundle:/usr/local/bundle
+    networks:
+      - courierx-network
+    command: >
+      sh -c "
+        bundle exec rails db:prepare &&
+        bundle exec rails server -b 0.0.0.0 -p 4000
+      "
+
+  # Go Core (Execution Plane)
+  core-go:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.go
+    container_name: courierx-core-go
+    environment:
+      DATABASE_URL: postgresql://courierx:courierx_dev_password@postgres:5432/courierx
+      REDIS_URL: redis://redis:6379/0
+      PORT: 8080
+      GO_ENV: development
+      CONTROL_PLANE_URL: http://control-plane:4000
+      CONTROL_PLANE_SECRET: dev-shared-secret
+      LOG_LEVEL: info
+      MAX_WORKERS: 100
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      control-plane:
+        condition: service_started
+    networks:
+      - courierx-network
+
+  # Sidekiq (Background Jobs for Rails)
+  sidekiq:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.rails
+    container_name: courierx-sidekiq
+    environment:
+      DATABASE_URL: postgresql://courierx:courierx_dev_password@postgres:5432/courierx
+      REDIS_URL: redis://redis:6379/0
+      RAILS_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../control-plane:/app
+      - rails_bundle:/usr/local/bundle
+    networks:
+      - courierx-network
+    command: bundle exec sidekiq
+
+networks:
+  courierx-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  rails_bundle:

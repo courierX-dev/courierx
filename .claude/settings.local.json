@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod tidy:*)",
+      "Bash(go build:*)",
+      "Bash(npm install)",
+      "Bash(pgrep:*)",
+      "Bash(npm run build:*)",
+      "Bash(pnpm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(pnpm build:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(NODE_API_URL=http://localhost:3000 NODE_API_PID=62419 npm run test:node:*)",
+      "Bash(npm install:*)",
+      "Bash(tee:*)",
+      "Bash(cat:*)",
+      "Bash(npm run:*)",
+      "Bash([ -d \"node_modules\" ])",
+      "Bash(GO_API_URL=http://localhost:8080 GO_API_PID=62918 npm run test:go:*)",
+      "Bash(rails --version:*)",
+      "Bash(rails new:*)",
+      "Bash(bundle install:*)",
+      "Bash(bin/rails generate:*)",
+      "Bash(chmod:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}

@@ -34,35 +34,26 @@ The PR automation system handles:
 The `scripts/pr-manager.sh` script provides manual control:
 
 ```bash
-# List all dependabot PRs
-pnpm pr:list
-
-# Auto-merge safe dependabot PRs
-pnpm pr:auto-merge
-
-# Show repository status
-pnpm pr:status
-
-# Clean up old workflow runs (default: 30 days)
-pnpm pr:cleanup
-
-# Close stale dependabot PRs (default: 60 days)
-pnpm pr:close-stale
-```
-
-### Direct script usage:
-```bash
 # Make executable (first time only)
 chmod +x scripts/pr-manager.sh
 
-# List dependabot PRs
+# List all dependabot PRs
 ./scripts/pr-manager.sh list
 
-# Auto-merge with custom settings
+# Auto-merge safe dependabot PRs
 ./scripts/pr-manager.sh auto-merge
 
-# Cleanup with custom retention
+# Show repository status
+./scripts/pr-manager.sh status
+
+# Clean up old workflow runs (default: 30 days)
+./scripts/pr-manager.sh cleanup
+
+# Clean up with custom retention (14 days)
 ./scripts/pr-manager.sh cleanup 14
+
+# Close stale dependabot PRs (default: 60 days)
+./scripts/pr-manager.sh close-stale
 
 # Close stale PRs older than 30 days
 ./scripts/pr-manager.sh close-stale 30
@@ -116,7 +107,7 @@ All workflows have minimal required permissions:
 - Monitor cleanup activities
 
 ### PR Status
-Use `pnpm pr:status` to get a quick overview:
+Use `./scripts/pr-manager.sh status` to get a quick overview:
 - Open PRs count
 - Recent workflow runs
 - Dependabot PR summary
