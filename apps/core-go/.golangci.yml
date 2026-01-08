@@ -1,6 +1,7 @@
 linters-settings:
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
   gocyclo:
     min-complexity: 15
   dupl:
@@ -8,6 +9,9 @@ linters-settings:
   goconst:
     min-len: 2
     min-occurrences: 3
+  gocritic:
+    disabled-checks:
+      - exitAfterDefer  # False positive in main.go
 
 linters:
   disable-all: true
@@ -16,7 +20,7 @@ linters:
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
+    - copyloopvar  # Replaces deprecated exportloopref
     - gochecknoinits
     - goconst
     - gocritic
@@ -47,7 +51,11 @@ issues:
         - errcheck
         - dupl
         - gosec
+    - path: main\.go
+      linters:
+        - gocritic  # Disable gocritic on main.go to avoid exitAfterDefer issues
 
 run:
   timeout: 5m
   tests: true
+

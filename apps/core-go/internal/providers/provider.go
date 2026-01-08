@@ -32,9 +32,9 @@ func NewProvider(config types.ProviderConfig) (Provider, error) {
 type ErrorClassification string
 
 const (
-	ErrorPermanent  ErrorClassification = "permanent"
-	ErrorTransient  ErrorClassification = "transient"
-	ErrorRateLimit  ErrorClassification = "rate_limit"
+	ErrorPermanent ErrorClassification = "permanent"
+	ErrorTransient ErrorClassification = "transient"
+	ErrorRateLimit ErrorClassification = "rate_limit"
 )
 
 // ClassifyError determines if an error is transient or permanent
@@ -81,7 +81,7 @@ func ClassifyError(err error) ErrorClassification {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		 stringContains(s, substr)))
+			stringContains(s, substr)))
 }
 
 func stringContains(s, substr string) bool {

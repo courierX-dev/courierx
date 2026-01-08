@@ -18,16 +18,16 @@ type Config struct {
 	RedisURL string
 
 	// Provider Credentials (fallback if not in DB)
-	SendGridAPIKey      string
-	MailgunAPIKey       string
-	MailgunDomain       string
-	AWSAccessKeyID      string
-	AWSSecretAccessKey  string
-	AWSRegion           string
-	SMTPHost            string
-	SMTPPort            int
-	SMTPUser            string
-	SMTPPass            string
+	SendGridAPIKey     string
+	MailgunAPIKey      string
+	MailgunDomain      string
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
+	AWSRegion          string
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUser           string
+	SMTPPass           string
 
 	// Logging
 	LogLevel  string
