@@ -1,0 +1,104 @@
+name: Rails Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'control-plane/**'
+      - '.github/workflows/rails-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'control-plane/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: courierx
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: courierx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgresql://courierx:password@localhost:5432/courierx_test
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: control-plane
+
+      - name: Install dependencies
+        working-directory: control-plane
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Set up database
+        working-directory: control-plane
+        run: |
+          bundle exec rails db:create
+          bundle exec rails db:schema:load
+
+      - name: Run RSpec tests
+        working-directory: control-plane
+        run: bundle exec rspec --format documentation
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./control-plane/coverage/coverage.json
+          flags: rails
+          name: rails-coverage
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: control-plane
+
+      - name: Run Rubocop
+        working-directory: control-plane
+        run: bundle exec rubocop
+
+      - name: Run Brakeman (Security)
+        working-directory: control-plane
+        run: bundle exec brakeman --no-pager
+
+      - name: Run Bundler Audit
+        working-directory: control-plane
+        run: bundle exec bundle-audit check --update

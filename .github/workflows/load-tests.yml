@@ -1,0 +1,58 @@
+name: Load Tests
+
+on:
+  workflow_dispatch:  # Manual trigger only
+    inputs:
+      target_url:
+        description: 'Target URL for load testing'
+        required: true
+        default: 'http://localhost:4000'
+      duration:
+        description: 'Test duration'
+        required: true
+        default: '5m'
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Run load tests
+        env:
+          BASE_URL: ${{ github.event.inputs.target_url }}
+          API_KEY: ${{ secrets.LOAD_TEST_API_KEY }}
+        run: |
+          cd tests/load
+          k6 run --out json=results.json send-email.js
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: tests/load/results.json
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('tests/load/results.json', 'utf8'));
+            // Parse and comment with results
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Load Test Results\n\n' + JSON.stringify(results, null, 2)
+            })

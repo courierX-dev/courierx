@@ -2,10 +2,17 @@
 
 This guide provides instructions for deploying CourierX to various cloud platforms.
 
+## Architecture Overview
+
+CourierX consists of two main services:
+- **Control Plane (Rails API)**: Business logic, authentication, multi-tenancy
+- **Core Engine (Go)**: High-performance email sending, provider management
+
 ## Prerequisites
 
 All deployment options require:
 - A PostgreSQL database (15+)
+- Redis (7+) for background jobs and caching
 - Environment variables configured (see below)
 - At least one email provider API key
 
@@ -17,9 +24,23 @@ Required environment variables for all deployments:
 # Database
 DATABASE_URL=postgresql://user:password@host:5432/courierx
 
-# Server
-NODE_ENV=production
-PORT=3000
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# Rails
+RAILS_ENV=production
+SECRET_KEY_BASE=your_secret_key_base_here
+RAILS_SERVE_STATIC_FILES=true
+
+# Go Core
+GO_CORE_URL=http://core:8080
+GO_CORE_SECRET=shared_secret_between_rails_and_go
+
+# JWT
+JWT_SECRET=your_jwt_secret_here
+
+# Encryption (for provider credentials)
+ENCRYPTION_KEY=your_32_byte_encryption_key
 
 # Email Providers (at least one required)
 SENDGRID_API_KEY=SG.xxxxx
@@ -53,33 +74,26 @@ Railway provides one-click deployment with automatic database provisioning.
    - Go to [Railway](https://railway.app)
    - Click "New Project" → "Deploy from GitHub"
    - Select your CourierX repository
-   - Railway will auto-detect the `railway.json` configuration
+   - Railway will auto-detect the configuration
 
-3. **Add PostgreSQL:**
+3. **Add PostgreSQL and Redis:**
    - In your project dashboard, click "New" → "Database" → "Add PostgreSQL"
-   - Railway will automatically set the `DATABASE_URL` environment variable
+   - Click "New" → "Database" → "Add Redis"
+   - Railway will automatically set the connection URLs
 
 4. **Set environment variables:**
    - Go to your service settings
    - Add all required environment variables
-   - At minimum: one email provider API key
 
 5. **Run migrations:**
    ```bash
-   railway run pnpm --filter @courierx/api prisma migrate deploy
-   railway run pnpm --filter @courierx/api prisma:seed
+   railway run -s control-plane bundle exec rails db:migrate
+   railway run -s control-plane bundle exec rails db:seed
    ```
 
 6. **Your API is live!**
    - Railway provides a public URL (e.g., `courierx-production.up.railway.app`)
-   - Access Swagger docs at: `https://your-app.railway.app/docs`
-
-### Custom Configuration
-
-Edit `infra/railway.json` to customize:
-- Docker build settings
-- Replica count
-- Restart policies
+   - Access API at: `https://your-app.railway.app/api/v1/`
 
 ---
 
@@ -95,41 +109,21 @@ Render offers easy deployment with Infrastructure as Code.
    - Connect your GitHub repository
    - Render will detect `infra/render.yaml`
 
-2. **Or use Render CLI:**
-   ```bash
-   # Install Render CLI
-   brew install render
-
-   # Deploy
-   render blueprint launch
-   ```
-
-3. **Configure environment variables:**
-   - Render will prompt for required env vars during setup
+2. **Configure environment variables:**
    - Add email provider API keys in the Render dashboard
-   - Database is automatically provisioned and connected
+   - Database and Redis are automatically provisioned
 
-4. **Run migrations:**
+3. **Run migrations:**
    ```bash
-   # Get shell access
-   render ssh courierx-api
-
-   # Inside the container
-   pnpm --filter @courierx/api prisma migrate deploy
-   pnpm --filter @courierx/api prisma:seed
+   # Get shell access via Render dashboard
+   # Inside the container:
+   cd /app/control-plane
+   bundle exec rails db:migrate
+   bundle exec rails db:seed
    ```
 
-5. **Your API is live!**
+4. **Your API is live!**
    - Access at: `https://courierx-api.onrender.com`
-   - Swagger docs: `https://courierx-api.onrender.com/docs`
-
-### Custom Configuration
-
-Edit `infra/render.yaml` to customize:
-- Instance size (plan: free/starter/standard)
-- Database configuration
-- Health check settings
-- Auto-scaling policies
 
 ---
 
@@ -141,11 +135,7 @@ Fly.io provides edge deployment with global distribution.
 
 1. **Install Fly CLI:**
    ```bash
-   # macOS/Linux
    curl -L https://fly.io/install.sh | sh
-
-   # Or via package manager
-   brew install flyctl
    ```
 
 2. **Authenticate:**
@@ -155,26 +145,25 @@ Fly.io provides edge deployment with global distribution.
 
 3. **Launch your app:**
    ```bash
-   # This uses infra/fly.toml configuration
    fly launch --config infra/fly.toml --no-deploy
    ```
 
-4. **Create PostgreSQL database:**
+4. **Create PostgreSQL and Redis:**
    ```bash
-   # Create database in the same region
+   # Create PostgreSQL database
    fly postgres create --name courierx-db --region iad
-
-   # Attach to your app
    fly postgres attach courierx-db --app courierx
+
+   # Create Redis
+   fly redis create --name courierx-redis --region iad
    ```
 
 5. **Set environment variables:**
    ```bash
+   fly secrets set SECRET_KEY_BASE=$(bin/rails secret)
+   fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+   fly secrets set ENCRYPTION_KEY=$(openssl rand -hex 16)
    fly secrets set SENDGRID_API_KEY=xxxxx
-   fly secrets set MAILGUN_API_KEY=xxxxx
-   fly secrets set MAILGUN_DOMAIN=mg.example.com
-   fly secrets set AWS_ACCESS_KEY_ID=xxxxx
-   fly secrets set AWS_SECRET_ACCESS_KEY=xxxxx
    ```
 
 6. **Deploy:**
@@ -184,26 +173,12 @@ Fly.io provides edge deployment with global distribution.
 
 7. **Run migrations:**
    ```bash
-   # SSH into the app
-   fly ssh console
-
-   # Run migrations
-   cd /app
-   pnpm --filter @courierx/api prisma migrate deploy
-   pnpm --filter @courierx/api prisma:seed
+   fly ssh console -a courierx-control-plane
+   cd /app && bundle exec rails db:migrate db:seed
    ```
 
 8. **Your API is live!**
    - Access at: `https://courierx.fly.dev`
-   - Swagger docs: `https://courierx.fly.dev/docs`
-
-### Custom Configuration
-
-Edit `infra/fly.toml` to customize:
-- VM size (cpu/memory)
-- Regions (for global distribution)
-- Auto-scaling settings
-- Health checks
 
 ---
 
@@ -214,32 +189,29 @@ For self-hosted deployment on your own infrastructure.
 ### Development Environment
 
 ```bash
-# Start PostgreSQL + Redis
-docker-compose -f infra/docker-compose.dev.yml up -d
-
-# Set environment variables
-cp apps/api/.env.example apps/api/.env
-# Edit .env with your configuration
+# Start all services (PostgreSQL, Redis, Rails, Go Core)
+docker-compose -f infra/docker-compose.yml up -d
 
 # Run migrations
-pnpm --filter @courierx/api prisma migrate deploy
-pnpm --filter @courierx/api prisma:seed
+docker-compose exec control-plane bundle exec rails db:migrate
+docker-compose exec control-plane bundle exec rails db:seed
 
-# Start API
-pnpm dev
+# Services:
+# - Rails Control Plane: http://localhost:4000
+# - Go Core Engine: http://localhost:8080
+# - PostgreSQL: localhost:5432
+# - Redis: localhost:6379
 ```
 
 ### Production Environment
 
 ```bash
 # Build and start all services
-docker-compose -f infra/docker-compose.full.yml up -d
+docker-compose -f infra/docker-compose.prod.yml up -d
 
 # Run migrations
-docker-compose exec api pnpm --filter @courierx/api prisma migrate deploy
-docker-compose exec api pnpm --filter @courierx/api prisma:seed
-
-# Your API is running on http://localhost:3000
+docker-compose exec control-plane bundle exec rails db:migrate
+docker-compose exec control-plane bundle exec rails db:seed
 ```
 
 ---
@@ -248,31 +220,45 @@ docker-compose exec api pnpm --filter @courierx/api prisma:seed
 
 After deploying to any platform:
 
-### 1. Create Your First API Key
-
-Use the seeded demo API key or create a new one:
+### 1. Create Your First Account
 
 ```bash
-# The seed script creates a demo API key
-# Check the deployment logs for: "Demo API Key: cx_xxxxx"
+curl -X POST https://your-app.com/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant": {"name": "My Company"},
+    "user": {
+      "email": "admin@mycompany.com",
+      "password": "secure_password",
+      "first_name": "John",
+      "last_name": "Doe"
+    }
+  }'
 ```
 
 ### 2. Test Your Deployment
 
 ```bash
 # Health check
-curl https://your-app.com/v1/health
+curl https://your-app.com/api/v1/health
 
-# Get account info (replace with your API key)
-curl -H "Authorization: Bearer cx_xxxxx" \
-     https://your-app.com/v1/me
+# Login and get JWT token
+curl -X POST https://your-app.com/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@mycompany.com", "password": "secure_password"}'
+
+# Create a product and get API key
+curl -X POST https://your-app.com/api/v1/products \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My App"}'
 
 # Send a test email
-curl -X POST https://your-app.com/v1/send \
-  -H "Authorization: Bearer cx_xxxxx" \
+curl -X POST https://your-app.com/api/v1/messages/send \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "to": ["test@example.com"],
+    "to": "test@example.com",
     "from": "noreply@yourdomain.com",
     "subject": "Test Email",
     "html": "<h1>Hello from CourierX!</h1>"
@@ -281,11 +267,11 @@ curl -X POST https://your-app.com/v1/send \
 
 ### 3. Configure Providers
 
-Set up your email providers in the dashboard or via API:
+Set up your email providers via API or environment variables:
 
 1. **Add Provider Credentials:**
-   - Via environment variables (recommended)
-   - Or store in database with encryption
+   - Via environment variables (recommended for security)
+   - Or store in database with encryption via API
 
 2. **Configure DNS Records:**
    - SPF: `v=spf1 include:spf.sendgrid.net ~all`
@@ -299,10 +285,9 @@ Set up your email providers in the dashboard or via API:
 
 ### 4. Monitor Your Deployment
 
-- **Health endpoint:** `/v1/health`
-- **Readiness endpoint:** `/v1/ready`
-- **API docs:** `/docs` (Swagger UI)
-- **Metrics:** Check platform-specific monitoring tools
+- **Health endpoint:** `/api/v1/health`
+- **Metrics:** Prometheus metrics at `/metrics` (Go Core)
+- Check platform-specific monitoring tools
 
 ---
 
@@ -312,34 +297,25 @@ Set up your email providers in the dashboard or via API:
 
 CourierX is designed to scale horizontally:
 
-- **Stateless API:** All state in PostgreSQL
-- **Connection pooling:** Configure via `DATABASE_URL`
-- **Rate limiting:** Atomic database operations
+- **Control Plane (Rails):** Stateless, scale horizontally behind load balancer
+- **Core Engine (Go):** Stateless, scale based on email volume
+- **Database:** Use connection pooling (PgBouncer recommended)
 
 ### Database Optimization
 
 For high-volume deployments:
 
 1. **Connection Pooling:**
-   ```bash
-   DATABASE_URL=postgresql://user:pass@host:5432/courierx?connection_limit=10
-   ```
+   - Use PgBouncer or pgpool-II
+   - Configure pool size in DATABASE_URL
 
 2. **Read Replicas:**
-   - Configure read replicas for heavy read operations
-   - Route analytics queries to replicas
+   - Configure read replicas for analytics queries
+   - Route reads to replicas via DATABASE_REPLICA_URL
 
 3. **Indexes:**
-   - Already optimized in schema
+   - Already optimized in Rails migrations
    - Monitor slow queries and add as needed
-
-### Performance Tuning
-
-Adjust based on your load:
-
-- **Railway:** Increase replica count in `railway.json`
-- **Render:** Upgrade plan or enable auto-scaling
-- **Fly.io:** Add regions and increase machine count
 
 ---
 
@@ -358,26 +334,22 @@ psql $DATABASE_URL -c "SELECT 1"
 
 **2. Migration Failures:**
 ```bash
-# Reset and re-run migrations
-pnpm --filter @courierx/api prisma migrate reset
-pnpm --filter @courierx/api prisma migrate deploy
+# Check migration status
+bundle exec rails db:migrate:status
+
+# Reset and re-run migrations (DESTRUCTIVE)
+bundle exec rails db:migrate:reset
 ```
 
-**3. Provider Authentication Errors:**
-- Verify API keys are correct
-- Check environment variables are set
-- Test provider credentials separately
+**3. Rails-Go Communication Errors:**
+- Verify GO_CORE_URL is accessible from Rails container
+- Check GO_CORE_SECRET matches on both services
+- Review logs: `docker-compose logs core`
 
 **4. Health Check Failures:**
-- Ensure database is accessible
+- Ensure database and Redis are accessible
 - Check logs for connection errors
 - Verify PORT environment variable
-
-### Support
-
-- **Documentation:** https://github.com/courierX-dev/courierx
-- **Issues:** https://github.com/courierX-dev/courierx/issues
-- **Community:** Join our Discord server
 
 ---
 
@@ -386,16 +358,17 @@ pnpm --filter @courierx/api prisma migrate deploy
 Before going to production:
 
 - [ ] Use strong, unique DATABASE_URL password
-- [ ] Enable SSL for database connections
-- [ ] Set NODE_ENV=production
-- [ ] Rotate API keys regularly
+- [ ] Enable SSL for database connections (`sslmode=require`)
+- [ ] Set RAILS_ENV=production
+- [ ] Generate strong SECRET_KEY_BASE
+- [ ] Generate strong JWT_SECRET
+- [ ] Generate strong ENCRYPTION_KEY
 - [ ] Configure CORS for your domains
 - [ ] Enable webhook signature verification
 - [ ] Set up monitoring and alerting
 - [ ] Configure backups for PostgreSQL
 - [ ] Use secrets management (not .env in production)
 - [ ] Enable rate limiting
-- [ ] Review and update provider credentials
 - [ ] Set up log aggregation
 - [ ] Configure firewall rules
 - [ ] Enable HTTPS/TLS everywhere
@@ -409,3 +382,4 @@ Before going to production:
 - [Fly.io Documentation](https://fly.io/docs)
 - [CourierX GitHub](https://github.com/courierX-dev/courierx)
 - [PostgreSQL Best Practices](https://www.postgresql.org/docs/current/index.html)
+- [Rails Deployment Guide](https://guides.rubyonrails.org/configuring.html#deploying-rails-applications)

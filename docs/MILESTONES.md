@@ -2,8 +2,8 @@
 
 ## 📊 Sprint Planning Overview
 
-**Total Estimated Story Points**: 380 points
-**Estimated Duration**: 12-16 weeks (3-4 months)
+**Total Estimated Story Points**: 435 points
+**Estimated Duration**: 20-24 weeks (5-6 months)
 **Team Velocity Assumption**: 30-40 points per 2-week sprint
 
 > **Tech Stack Decision**: Rails API-only (no views) + Next.js Dashboard + Go Core
@@ -280,6 +280,66 @@
 
 ---
 
+## 🎯 Milestone 5: Client SDKs & Developer Experience
+**Sprint**: 11-12 (Weeks 21-24)
+**Total Story Points**: 55
+**Status**: 🟡 Not Started
+
+> **Note**: SDKs should be built after the API is stable. They are thin wrappers around the REST API 
+> with TypeScript/language-native types. Consider auto-generating from OpenAPI specs.
+
+### Epic 5.1: Node.js / TypeScript SDK (21 pts)
+
+| Story | Description | Story Points | Priority | Dependencies |
+|-------|-------------|--------------|----------|--------------|
+| SDK-001 | Create `@courierx/node` package with TypeScript | 5 | P0 | Stable API |
+| SDK-002 | Implement send email methods with full type safety | 5 | P0 | SDK-001 |
+| SDK-003 | Add template and batch sending support | 3 | P1 | SDK-002 |
+| SDK-004 | Implement webhook signature verification helper | 3 | P1 | SDK-001 |
+| SDK-005 | Write comprehensive documentation and examples | 3 | P0 | SDK-002 |
+| SDK-006 | Publish to npm with automated releases | 2 | P0 | SDK-005 |
+
+**Acceptance Criteria**:
+- [ ] Package published on npm as `@courierx/node`
+- [ ] Full TypeScript support with exported types
+- [ ] Comprehensive test coverage (>90%)
+- [ ] README with quick start and examples
+- [ ] Automated npm publishing via GitHub Actions
+
+---
+
+### Epic 5.2: Additional Language SDKs (21 pts)
+
+| Story | Description | Story Points | Priority | Dependencies |
+|-------|-------------|--------------|----------|--------------|
+| SDK-010 | Create Python SDK (`courierx-python`) | 8 | P2 | Stable API |
+| SDK-011 | Create Ruby SDK (`courierx-ruby` gem) | 5 | P2 | Stable API |
+| SDK-012 | Create Go SDK (`courierx-go`) | 5 | P2 | Stable API |
+| SDK-013 | Document all SDKs in unified docs | 3 | P2 | All SDKs |
+
+**Acceptance Criteria**:
+- [ ] Each SDK published to respective package registries
+- [ ] Consistent API across all SDKs
+- [ ] Language-idiomatic implementations
+- [ ] Basic examples for each SDK
+
+---
+
+### Epic 5.3: Developer Portal & API Playground (13 pts)
+
+| Story | Description | Story Points | Priority | Dependencies |
+|-------|-------------|--------------|----------|--------------|
+| SDK-020 | Create interactive API playground | 5 | P2 | OpenAPI docs |
+| SDK-021 | Add code generation in playground (multi-language) | 5 | P2 | SDK-020 |
+| SDK-022 | Create SDK quickstart wizard in dashboard | 3 | P2 | Dashboard |
+
+**Acceptance Criteria**:
+- [ ] Developers can test API calls in browser
+- [ ] Code snippets generated for all SDKs
+- [ ] Quickstart guides users through first email
+
+---
+
 ## 📅 Sprint Breakdown
 
 ### Sprint 1-2: Foundation (Weeks 1-4)
@@ -313,6 +373,13 @@
 - Epic 4.1: Next.js Dashboard (58 pts)
 - Epic 4.2: Documentation (10 pts)
 - **Total**: 68 pts
+
+### Sprint 11-12: SDKs & Developer Experience (Weeks 21-24)
+**Goal**: Client SDKs, developer portal
+- Epic 5.1: Node.js/TypeScript SDK (21 pts)
+- Epic 5.2: Additional SDKs (21 pts)
+- Epic 5.3: Developer Portal (13 pts)
+- **Total**: 55 pts
 
 ---
 
@@ -360,9 +427,11 @@ For a story to be considered "Done", it must meet ALL criteria:
 | 8 | 27 | - | - | Business Features |
 | 9 | 33 | - | - | Frontend |
 | 10 | 32 | - | - | Frontend & Polish |
+| 11 | 28 | - | - | SDKs |
+| 12 | 27 | - | - | SDKs & Portal |
 
 **Target Velocity**: 30-40 points per 2-week sprint
-**Total**: 380 points ÷ 10 sprints = ~38 points/sprint
+**Total**: 435 points ÷ 12 sprints = ~36 points/sprint
 
 ---
 

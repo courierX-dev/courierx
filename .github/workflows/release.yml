@@ -1,72 +1,150 @@
-name: Release Packages
+name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
-
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
 
 jobs:
-  release:
-    name: Release
+  build-go:
+    name: Build Go Core
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
+
     steps:
-      - name: Checkout Repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          node-version: 20
-          registry-url: 'https://registry.npmjs.org'
+          go-version: '1.21'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm db:generate
-
-      - name: Build packages
-        run: pnpm build
-
-      - name: Run tests
-        run: pnpm test || echo "Tests skipped - no test files found"
-
-      - name: Create Release Pull Request or Publish to npm
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          # This expects you to have a script called release which does a build for your packages and calls changeset publish
-          publish: pnpm release
-          title: 'chore: release packages'
-          commit: 'chore: release packages'
+      - name: Build binary
+        working-directory: apps/core-go
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Send Slack notification on release
-        if: steps.changesets.outputs.published == 'true'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          echo "📦 New packages published!"
-          echo "Published packages: ${{ steps.changesets.outputs.publishedPackages }}"
+          go build -ldflags="-s -w" -o courierx-core-${{ matrix.goos }}-${{ matrix.goarch }} cmd/server/main.go
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: courierx-core-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: apps/core-go/courierx-core-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [build-go]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push Go Core
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/core-go
+          file: ./infra/docker/Dockerfile.core
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/core:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository }}/core:latest
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push Control Plane
+        uses: docker/build-push-action@v5
+        with:
+          context: ./control-plane
+          file: ./infra/docker/Dockerfile.control-plane
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/control-plane:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository }}/control-plane:latest
+          platforms: linux/amd64,linux/arm64
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-go, docker]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: CourierX ${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          files: |
+            artifacts/**/*
+          body: |
+            ## CourierX ${{ steps.version.outputs.VERSION }}
+            
+            ### Docker Images
+            
+            ```bash
+            # Pull the Go Core
+            docker pull ghcr.io/${{ github.repository }}/core:${{ steps.version.outputs.VERSION }}
+            
+            # Pull the Control Plane
+            docker pull ghcr.io/${{ github.repository }}/control-plane:${{ steps.version.outputs.VERSION }}
+            ```
+            
+            ### Binaries
+            
+            Download the appropriate binary for your platform from the assets below.
+            
+            See [CHANGELOG.md](./CHANGELOG.md) for details.

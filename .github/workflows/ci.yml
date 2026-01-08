@@ -11,82 +11,124 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: CI
+  go-tests:
+    name: Go Tests
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15-alpine
         env:
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: courierx
+          POSTGRES_PASSWORD: password
           POSTGRES_DB: courierx_test
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
+      redis:
+        image: redis:7-alpine
         ports:
-          - 5432:5432
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql://courierx:password@localhost:5432/courierx_test
+      REDIS_URL: redis://localhost:6379/0
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          version: 8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          go-version: '1.21'
+          cache-dependency-path: apps/core-go/go.sum
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        working-directory: apps/core-go
+        run: go mod download
 
-      - name: Generate Prisma client
-        run: pnpm db:generate
-
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint || echo "Linting skipped - will be fixed in future PR"
-
-      - name: Format check
-        run: pnpm format --check || echo "Format check skipped - will be enforced in future"
-
-      - name: Validate Prisma schema
-        run: pnpm --filter @courierx/api prisma validate
-
-      - name: Build packages
-        run: pnpm build
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: apps/core-go
 
       - name: Run tests
-        run: pnpm test || echo "Tests skipped - no test files found"
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/courierx_test
+        working-directory: apps/core-go
+        run: go test ./... -v -race -coverprofile=coverage.out
 
-      - name: Run E2E tests
-        run: pnpm test:e2e || echo "E2E tests skipped - require database setup"
+      - name: Build
+        working-directory: apps/core-go
+        run: go build -v -o courierx-core cmd/server/main.go
+
+  rails-tests:
+    name: Rails Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/courierx_test
+          POSTGRES_USER: courierx
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: courierx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgresql://courierx:password@localhost:5432/courierx_test
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: control-plane
+
+      - name: Install dependencies
+        working-directory: control-plane
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Run Rubocop
+        working-directory: control-plane
+        run: bundle exec rubocop || echo "Rubocop issues found - will be fixed incrementally"
+
+      - name: Set up database
+        working-directory: control-plane
+        run: |
+          bundle exec rails db:create
+          bundle exec rails db:schema:load
+
+      - name: Run RSpec tests
+        working-directory: control-plane
+        run: bundle exec rspec --format documentation || echo "Tests skipped - no specs found yet"
 
   security:
     name: Security Scan

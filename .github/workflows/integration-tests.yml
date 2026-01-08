@@ -1,0 +1,98 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 2 * * *'  # Run daily at 2 AM
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: courierx
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: courierx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql://courierx:password@localhost:5432/courierx_test
+      REDIS_URL: redis://localhost:6379/0
+      GO_CORE_URL: http://localhost:8080
+      RAILS_URL: http://localhost:4000
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: control-plane
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install dependencies
+        run: |
+          cd control-plane && bundle install
+          cd ../apps/core-go && go mod download
+
+      - name: Set up database
+        working-directory: control-plane
+        run: |
+          bundle exec rails db:create
+          bundle exec rails db:schema:load
+          bundle exec rails db:seed
+
+      - name: Start Go Core
+        working-directory: apps/core-go
+        run: |
+          go build -o courierx-core cmd/server/main.go
+          ./courierx-core &
+          sleep 5
+
+      - name: Start Rails API
+        working-directory: control-plane
+        run: |
+          bundle exec rails server -p 4000 &
+          sleep 10
+
+      - name: Wait for services
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:4000/health; do sleep 2; done'
+          timeout 60 bash -c 'until curl -f http://localhost:8080/health; do sleep 2; done'
+
+      - name: Run integration tests
+        working-directory: control-plane
+        run: bundle exec rspec spec/integration/
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: |
+            control-plane/log/test.log
+            apps/core-go/*.log

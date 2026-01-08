@@ -1,33 +1,18 @@
 #!/usr/bin/env node
 
-import { CourierXClient } from '@courierx/client';
-
-// Example using the CourierX client
-const client = new CourierXClient({
-    apiKey: process.env.COURIERX_API_KEY || 'cx_your_api_key_here',
-    baseUrl: process.env.COURIERX_BASE_URL || 'http://localhost:3000',
-});
-
-async function sendEmail() {
-    try {
-        const response = await client.send({
-            to: ['recipient@example.com'],
-            from: 'sender@example.com',
-            subject: 'Hello from CourierX!',
-            html: '<h1>Hello World</h1><p>This email was sent via CourierX.</p>',
-            text: 'Hello World\n\nThis email was sent via CourierX.',
-        });
-
-        console.log('✅ Email sent successfully:', response);
-    } catch (error) {
-        console.error('❌ Failed to send email:', error.message);
-    }
-}
+/**
+ * CourierX Email Examples
+ * 
+ * This file demonstrates how to send emails using the CourierX REST API.
+ * 
+ * Note: A Node.js SDK (@courierx/node) is planned for a future release.
+ * For now, use the REST API directly as shown below.
+ */
 
 // Example using direct REST API
 async function sendEmailREST() {
     try {
-        const response = await fetch('http://localhost:3000/v1/send', {
+        const response = await fetch('http://localhost:4000/api/v1/messages/send', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${process.env.COURIERX_API_KEY || 'cx_your_api_key_here'}`,
@@ -53,11 +38,28 @@ async function sendEmailREST() {
     }
 }
 
+// Example using cURL (for reference)
+function printCurlExample() {
+    console.log(`
+📋 cURL Example:
+
+curl -X POST http://localhost:4000/api/v1/messages/send \\
+  -H "Authorization: Bearer cx_your_api_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": ["recipient@example.com"],
+    "from": "sender@example.com",
+    "subject": "Hello from CourierX",
+    "html": "<h1>Hello World</h1>",
+    "text": "Hello World"
+  }'
+    `);
+}
+
 // Run examples
 console.log('🚀 CourierX Email Examples\n');
 
-console.log('📧 Sending via Client SDK...');
-await sendEmail();
+printCurlExample();
 
 console.log('\n📧 Sending via REST API...');
 await sendEmailREST();
