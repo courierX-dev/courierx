@@ -25,7 +25,7 @@ func (e *Engine) Render(template string, variables map[string]interface{}) (stri
 
 // RenderHTML renders an HTML template
 func (e *Engine) RenderHTML(html string, variables map[string]interface{}) (string, error) {
-	if variables == nil || len(variables) == 0 {
+	if len(variables) == 0 {
 		return html, nil
 	}
 	return e.Render(html, variables)
@@ -33,7 +33,7 @@ func (e *Engine) RenderHTML(html string, variables map[string]interface{}) (stri
 
 // RenderSubject renders a subject template
 func (e *Engine) RenderSubject(subject string, variables map[string]interface{}) (string, error) {
-	if variables == nil || len(variables) == 0 {
+	if len(variables) == 0 {
 		return subject, nil
 	}
 	return e.Render(subject, variables)

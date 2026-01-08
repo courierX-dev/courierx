@@ -65,7 +65,7 @@ jobs:
 
       - name: Build
         working-directory: apps/core-go
-        run: go build -v -o courierx-core cmd/server/main.go
+        run: go build -v -o courierx-core ./cmd/server/main.go
 
   rails-tests:
     name: Rails Tests
@@ -118,13 +118,13 @@ jobs:
 
       - name: Run Rubocop
         working-directory: control-plane
-        run: bundle exec rubocop || echo "Rubocop issues found - will be fixed incrementally"
+        run: bundle exec rubocop -A || true
 
       - name: Set up database
         working-directory: control-plane
         run: |
           bundle exec rails db:create
-          bundle exec rails db:schema:load
+          bundle exec rails db:migrate
 
       - name: Run RSpec tests
         working-directory: control-plane

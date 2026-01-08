@@ -64,7 +64,7 @@ jobs:
         working-directory: control-plane
         run: |
           bundle exec rails db:create
-          bundle exec rails db:schema:load
+          bundle exec rails db:migrate
 
       - name: Run RSpec tests
         working-directory: control-plane

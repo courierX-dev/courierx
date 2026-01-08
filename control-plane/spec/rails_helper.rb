@@ -60,7 +60,7 @@ RSpec.configure do |config|
   config.before(:each) do
     WebMock.disable_net_connect!(
       allow_localhost: true,
-      allow: ['localhost:4000', 'localhost:8080']
+      allow: [ 'localhost:4000', 'localhost:8080' ]
     )
   end
 end

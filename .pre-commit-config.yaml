@@ -1,0 +1,58 @@
+# Pre-commit hooks for CourierX
+# Install: pip install pre-commit
+# Setup: pre-commit install
+
+repos:
+  # Ruby/Rails hooks
+  - repo: https://github.com/mattlqx/pre-commit-ruby
+    rev: v1.3.6
+    hooks:
+      - id: rubocop
+        files: ^control-plane/
+        args: ['--auto-correct']
+
+  # Go hooks
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+        files: ^apps/core-go/
+      - id: go-vet
+        files: ^apps/core-go/
+      - id: go-lint
+        files: ^apps/core-go/
+
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-json
+      - id: pretty-format-json
+        args: ['--autofix', '--no-sort-keys']
+
+  # Markdown
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+
+  # Commit message format
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]

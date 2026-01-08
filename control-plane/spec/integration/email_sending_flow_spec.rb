@@ -221,7 +221,7 @@ RSpec.describe 'Email Sending Flow', type: :integration do
 
       # Verify complete event history
       event_types = message.events.order(:created_at).pluck(:event_type)
-      expect(event_types).to eq(['queued', 'sent', 'delivered', 'opened', 'clicked'])
+      expect(event_types).to eq([ 'queued', 'sent', 'delivered', 'opened', 'clicked' ])
     end
 
     it 'validates API key before processing' do

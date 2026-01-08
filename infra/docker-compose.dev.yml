@@ -1,24 +1,82 @@
 version: '3.8'
 
+# Development Docker Compose with all dev tools
+# Use with: docker-compose -f infra/docker-compose.dev.yml up
+
 services:
+  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
+    container_name: courierx-postgres-dev
     environment:
       POSTGRES_DB: courierx
       POSTGRES_USER: courierx
-      POSTGRES_PASSWORD: courierx
+      POSTGRES_PASSWORD: courierx_dev_password
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U courierx"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - courierx-dev
 
+  # Redis
   redis:
     image: redis:7-alpine
+    container_name: courierx-redis-dev
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - redis_dev_data:/data
+    networks:
+      - courierx-dev
+
+  # Mailhog - Email Testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: courierx-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - courierx-dev
+
+  # Redis Commander
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: courierx-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - courierx-dev
+
+  # pgAdmin
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: courierx-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@courierx.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_dev_data:/var/lib/pgadmin
+    networks:
+      - courierx-dev
+
+networks:
+  courierx-dev:
+    driver: bridge
 
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_dev_data:
+  redis_dev_data:
+  pgadmin_dev_data:

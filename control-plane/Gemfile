@@ -18,7 +18,7 @@ gem "sidekiq", "~> 7.2"
 gem "faraday", "~> 2.8"
 
 # Environment Variables
-gem "dotenv", groups: [:development, :test]
+gem "dotenv", groups: [ :development, :test ]
 
 # Rate Limiting
 gem "rack-attack"

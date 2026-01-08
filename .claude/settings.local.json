@@ -23,7 +23,8 @@
       "Bash(bundle install:*)",
       "Bash(bin/rails generate:*)",
       "Bash(chmod:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(xargs:*)"
     ]
   }
 }

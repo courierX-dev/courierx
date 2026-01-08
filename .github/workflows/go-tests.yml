@@ -106,7 +106,7 @@ jobs:
 
       - name: Build
         working-directory: apps/core-go
-        run: go build -v -o courierx-core cmd/server/main.go
+        run: go build -v -o courierx-core ./cmd/server/main.go
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
