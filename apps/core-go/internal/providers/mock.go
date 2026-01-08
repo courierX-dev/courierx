@@ -2,8 +2,9 @@ package providers
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"time"
 
 	"github.com/courierx/core-go/internal/types"
@@ -51,8 +52,12 @@ func (p *MockProvider) Send(ctx context.Context, req *types.SendRequest) (*types
 	}
 
 	// Simulate random failures based on failure rate
-	if p.failureRate > 0 && rand.Float64() < p.failureRate {
-		return nil, fmt.Errorf("mock provider: simulated transient failure")
+	if p.failureRate > 0 {
+		// Use crypto/rand for security compliance (even though this is just a mock)
+		n, err := rand.Int(rand.Reader, big.NewInt(100))
+		if err == nil && float64(n.Int64())/100.0 < p.failureRate {
+			return nil, fmt.Errorf("mock provider: simulated transient failure")
+		}
 	}
 
 	// Simulate configured failure
