@@ -48,4 +48,8 @@ group :development, :test do
   gem "rubocop-rails-omakase", require: false
   gem "rspec-rails", "~> 7.0"
   gem "simplecov", require: false
+  gem "factory_bot_rails"
+  gem "database_cleaner-active_record"
+  gem "webmock"
+  gem "shoulda-matchers"
 end
