@@ -3,8 +3,9 @@
 > **Multi-provider email delivery service with intelligent routing and automatic failover**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Ruby](https://img.shields.io/badge/Ruby-3.2+-red.svg)](https://www.ruby-lang.org/)
-[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8.svg)](https://golang.org/)
+[![Ruby](https://img.shields.io/badge/Ruby-3.4+-red.svg)](https://www.ruby-lang.org/)
+[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://golang.org/)
+[![CI](https://github.com/courierX-dev/courierx/actions/workflows/ci.yml/badge.svg)](https://github.com/courierX-dev/courierx/actions)
 
 CourierX is a production-ready email delivery platform that intelligently routes emails across multiple providers with automatic failover, comprehensive webhook handling, and enterprise-grade features.
 
@@ -55,21 +56,40 @@ CourierX is a production-ready email delivery platform that intelligently routes
 
 ## 🚀 Quick Start
 
-### Development Setup
+### Development Setup with Docker (Recommended)
 
 ```bash
 # Clone repository
 git clone https://github.com/courierX-dev/courierx.git
 cd courierx
 
-# Run setup script (sets up Docker, database, and all services)
-./infra/scripts/setup-dev.sh
+# Start all services with Docker Compose
+cd infra && docker compose up -d
+
+# Check that all containers are running
+docker compose ps
 
 # Services will be available at:
 # - Rails Control Plane: http://localhost:4000
 # - Go Core Engine:      http://localhost:8080
+# - Sidekiq:             (background job processing)
 # - PostgreSQL:          localhost:5432
 # - Redis:               localhost:6379
+```
+
+### Native Development (without full Docker)
+
+If you prefer to run Rails and Go natively (faster for development):
+
+```bash
+# Start only databases in Docker
+./infra/scripts/setup-dev-light.sh
+
+# Then run Rails in one terminal:
+cd control-plane && bundle install && rails db:create db:migrate && rails server -p 4000
+
+# And Go in another terminal:
+cd apps/core-go && go run .
 ```
 
 ### Using the API
@@ -129,11 +149,11 @@ curl -X POST http://localhost:4000/api/v1/messages/send \
 
 ### Prerequisites
 
-- Ruby 3.2+
-- Go 1.21+
-- PostgreSQL 15+
-- Redis 7+
-- Docker & Docker Compose
+- **Ruby 3.4+** (Rails 8.1 requires Ruby 3.4)
+- **Go 1.22+**
+- **Docker & Docker Compose** (for containerized development)
+- PostgreSQL 15+ (included in Docker)
+- Redis 7+ (included in Docker)
 
 ### Project Structure
 
@@ -159,14 +179,23 @@ courierx/
 ### Running Services
 
 ```bash
-# Start all services
-docker-compose -f infra/docker-compose.yml up -d
+# Start all services (from project root)
+cd infra && docker compose up -d
 
 # View logs
-docker-compose -f infra/docker-compose.yml logs -f
+docker compose logs -f
+
+# View logs for specific service
+docker compose logs -f control-plane
+
+# Stop all services
+docker compose down
+
+# Restart a specific service
+docker compose restart control-plane
 
 # Run Rails console
-docker-compose -f infra/docker-compose.yml exec control-plane bundle exec rails console
+docker compose exec control-plane bundle exec rails console
 
 # Run Go tests
 cd apps/core-go && go test ./...
