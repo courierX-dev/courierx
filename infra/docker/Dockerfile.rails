@@ -1,5 +1,5 @@
 # Base stage
-FROM ruby:3.3-alpine AS base
+FROM ruby:3.4-alpine AS base
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -7,7 +7,14 @@ RUN apk add --no-cache \
     tzdata \
     nodejs \
     npm \
-    yaml
+    yaml \
+    gcompat
+
+# Set bundle path
+ENV BUNDLE_PATH=/usr/local/bundle
+ENV BUNDLE_BIN=/usr/local/bundle/bin
+ENV GEM_HOME=/usr/local/bundle
+ENV PATH="$BUNDLE_BIN:$PATH"
 
 WORKDIR /app
 
@@ -24,9 +31,7 @@ RUN apk add --no-cache \
 COPY control-plane/Gemfile control-plane/Gemfile.lock ./
 
 # Install gems
-RUN bundle config set --local deployment 'true' && \
-    bundle config set --local without 'development test' && \
-    bundle install -j4
+RUN bundle install -j4
 
 # Runtime stage
 FROM base AS runtime
@@ -51,7 +56,7 @@ USER rails
 EXPOSE 4000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
 
 # Start server

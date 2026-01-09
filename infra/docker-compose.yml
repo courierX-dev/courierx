@@ -1,4 +1,4 @@
-version: '3.8'
+# CourierX Development Stack
 
 services:
   # PostgreSQL Database
@@ -15,7 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U courierx"]
+      test: [ "CMD-SHELL", "pg_isready -U courierx" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,7 +31,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -53,6 +53,7 @@ services:
       GO_CORE_SECRET: dev-shared-secret
       JWT_SECRET: dev-jwt-secret
       ENCRYPTION_KEY: dev-encryption-key-32-chars!!!
+      SECRET_KEY_BASE: dev-secret-key-base-for-docker-compose-minimum-128-chars-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
     ports:
       - "4000:4000"
     depends_on:
@@ -60,9 +61,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ../control-plane:/app
-      - rails_bundle:/usr/local/bundle
     networks:
       - courierx-network
     command: >
@@ -108,14 +106,12 @@ services:
       DATABASE_URL: postgresql://courierx:courierx_dev_password@postgres:5432/courierx
       REDIS_URL: redis://redis:6379/0
       RAILS_ENV: development
+      SECRET_KEY_BASE: dev-secret-key-base-for-docker-compose-minimum-128-chars-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ../control-plane:/app
-      - rails_bundle:/usr/local/bundle
     networks:
       - courierx-network
     command: bundle exec sidekiq
@@ -127,4 +123,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  rails_bundle:
+
+
