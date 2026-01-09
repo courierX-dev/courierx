@@ -1,5 +1,9 @@
 source "https://rubygems.org"
 
+# Pin connection_pool to 2.x for Ruby 3.3 compatibility
+# (3.x uses Ruby 3.4+ syntax)
+gem "connection_pool", "~> 2.4"
+
 gem "rails", "~> 8.1.1"
 gem "pg", "~> 1.1"
 gem "puma", ">= 5.0"
