@@ -37,7 +37,7 @@ jobs:
           k6 run --out json=results.json send-email.js
 
       - name: Upload results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: k6-results
           path: tests/load/results.json

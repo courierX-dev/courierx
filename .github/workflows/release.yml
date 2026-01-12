@@ -38,7 +38,7 @@ jobs:
           go build -ldflags="-s -w" -o courierx-core-${{ matrix.goos }}-${{ matrix.goarch }} cmd/server/main.go
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: courierx-core-${{ matrix.goos }}-${{ matrix.goarch }}
           path: apps/core-go/courierx-core-${{ matrix.goos }}-${{ matrix.goarch }}
