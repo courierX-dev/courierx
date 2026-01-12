@@ -71,7 +71,7 @@ jobs:
         run: bundle exec rspec --format documentation || echo "RSpec tests skipped - models not yet implemented"
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./control-plane/coverage/coverage.json
           flags: rails
