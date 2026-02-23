@@ -7,114 +7,131 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/courierx/core-go/internal/types"
 )
 
-// SendGridProvider implements SendGrid email sending
+// SendGridProvider sends email via the SendGrid v3 Mail Send API.
 type SendGridProvider struct {
 	apiKey string
 	client *http.Client
 }
 
-// NewSendGridProvider creates a new SendGrid provider
+// NewSendGridProvider validates config and returns a ready provider.
 func NewSendGridProvider(config map[string]interface{}) (*SendGridProvider, error) {
 	apiKey, ok := config["apiKey"].(string)
 	if !ok || apiKey == "" {
 		return nil, fmt.Errorf("sendgrid: apiKey is required")
 	}
-
 	return &SendGridProvider{
 		apiKey: apiKey,
-		client: &http.Client{
-			Timeout: 30,
-		},
+		client: &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 
 func (p *SendGridProvider) Send(ctx context.Context, req *types.SendRequest) (*types.SendResponse, error) {
-	// Build SendGrid request payload
-	payload := map[string]interface{}{
-		"personalizations": []map[string]interface{}{
-			{
-				"to": []map[string]string{
-					{"email": req.To},
-				},
-			},
-		},
-		"from": map[string]string{
-			"email": req.From,
-		},
-		"subject": req.Subject,
+	personalization := map[string]interface{}{
+		"to": []map[string]string{{"email": req.To}},
+	}
+	if len(req.CC) > 0 {
+		cc := make([]map[string]string, len(req.CC))
+		for i, addr := range req.CC {
+			cc[i] = map[string]string{"email": addr}
+		}
+		personalization["cc"] = cc
+	}
+	if len(req.BCC) > 0 {
+		bcc := make([]map[string]string, len(req.BCC))
+		for i, addr := range req.BCC {
+			bcc[i] = map[string]string{"email": addr}
+		}
+		personalization["bcc"] = bcc
 	}
 
-	// Add content
-	content := []map[string]string{}
-	if req.HTML != "" {
-		content = append(content, map[string]string{
-			"type":  "text/html",
-			"value": req.HTML,
-		})
+	payload := map[string]interface{}{
+		"personalizations": []interface{}{personalization},
+		"from":             map[string]string{"email": req.From},
+		"subject":          req.Subject,
 	}
+
+	// Content
+	var content []map[string]string
 	if req.Text != "" {
-		content = append(content, map[string]string{
-			"type":  "text/plain",
-			"value": req.Text,
-		})
+		content = append(content, map[string]string{"type": "text/plain", "value": req.Text})
+	}
+	if req.HTML != "" {
+		content = append(content, map[string]string{"type": "text/html", "value": req.HTML})
 	}
 	payload["content"] = content
 
-	// Add reply-to if provided
+	// Reply-To
 	if req.ReplyTo != "" {
-		payload["reply_to"] = map[string]string{
-			"email": req.ReplyTo,
-		}
+		payload["reply_to"] = map[string]string{"email": req.ReplyTo}
 	}
 
-	// Marshal payload
+	// Attachments
+	if len(req.Attachments) > 0 {
+		atts := make([]map[string]string, len(req.Attachments))
+		for i, a := range req.Attachments {
+			ct := a.ContentType
+			if ct == "" {
+				ct = "application/octet-stream"
+			}
+			atts[i] = map[string]string{
+				"content":     a.Content, // already base64
+				"type":        ct,
+				"filename":    a.Filename,
+				"disposition": "attachment",
+			}
+		}
+		payload["attachments"] = atts
+	}
+
+	// Categories (tags)
+	if len(req.Tags) > 0 {
+		cats := make([]string, len(req.Tags))
+		copy(cats, req.Tags)
+		payload["categories"] = cats
+	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("sendgrid: failed to marshal payload: %w", err)
+		return nil, fmt.Errorf("sendgrid: marshal error: %w", err)
 	}
 
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://api.sendgrid.com/v3/mail/send", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.sendgrid.com/v3/mail/send", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("sendgrid: failed to create request: %w", err)
+		return nil, fmt.Errorf("sendgrid: create request: %w", err)
 	}
-
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	// Send request
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("sendgrid: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Check response
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("sendgrid: unexpected status %d: %s", resp.StatusCode, string(bodyBytes))
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("sendgrid: status %d: %s", resp.StatusCode, string(b))
 	}
 
-	// Extract message ID from X-Message-Id header
-	messageID := resp.Header.Get("X-Message-Id")
-	if messageID == "" {
-		messageID = "sendgrid-" + req.To
+	msgID := resp.Header.Get("X-Message-Id")
+	if msgID == "" {
+		msgID = "sg-" + req.To
 	}
 
 	return &types.SendResponse{
 		Success:   true,
-		MessageID: messageID,
+		MessageID: msgID,
 		Provider:  "sendgrid",
 	}, nil
 }
 
-func (p *SendGridProvider) Name() string {
-	return "sendgrid"
-}
+func (p *SendGridProvider) Name() string { return "sendgrid" }
 
 func (p *SendGridProvider) ValidateConfig() error {
 	if p.apiKey == "" {

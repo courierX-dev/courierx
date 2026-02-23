@@ -1,10 +1,57 @@
 Rails.application.routes.draw do
-  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
-
-  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
-  # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # Defines the root path route ("/")
-  # root "posts#index"
+  # Sidekiq Web UI (dev only — add auth in production)
+  require "sidekiq/web"
+  if Rails.env.development?
+    mount Sidekiq::Web => "/sidekiq"
+  else
+    Sidekiq::Web.use Rack::Auth::Basic do |username, password|
+      ActiveSupport::SecurityUtils.secure_compare(username, ENV.fetch("SIDEKIQ_USERNAME", "admin")) &
+      ActiveSupport::SecurityUtils.secure_compare(password, ENV.fetch("SIDEKIQ_PASSWORD", ""))
+    end
+    mount Sidekiq::Web => "/sidekiq"
+  end
+
+  namespace :api, defaults: { format: :json } do
+    namespace :v1 do
+      # ── Auth ──
+      post "auth/register", to: "auth#register"
+      post "auth/login",    to: "auth#login"
+      get  "auth/me",       to: "auth#me"
+
+      # ── Waitlist (public, no auth) ──
+      post "waitlist",        to: "waitlist#create"
+      get  "waitlist/status", to: "waitlist#status"
+
+      # ── Billing webhooks (public, signature-verified) ──
+      post "billing/webhooks", to: "billing_webhooks#create"
+
+      # ── Health check (public) ──
+      get "health", to: "health#show"
+
+      # ── Dashboard ──
+      get "dashboard/metrics", to: "dashboard#metrics"
+
+      # ── Resources ──
+      resources :api_keys,             only: [:index, :create, :destroy] do
+        member { patch :revoke }
+      end
+      resources :provider_connections, only: [:index, :show, :create, :update, :destroy]
+      resources :domains,              only: [:index, :show, :create, :destroy] do
+        member { post :verify }
+      end
+      resources :routing_rules,        only: [:index, :show, :create, :update, :destroy]
+      resources :emails,               only: [:index, :show, :create]
+      resources :suppressions,         only: [:index, :create, :destroy]
+      resources :webhook_endpoints,    only: [:index, :show, :create, :update, :destroy]
+      resources :mcp_connections,      only: [:index, :show, :create, :update, :destroy]
+      resources :usage_stats,          only: [:index]
+
+      # ── Super Admin Portal ──
+      namespace :admin do
+        resources :tenants, only: [:index, :show, :update]
+      end
+    end
+  end
 end

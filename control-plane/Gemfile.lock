@@ -345,6 +345,15 @@ GEM
       ffi (~> 1.12)
       logger
     securerandom (0.4.1)
+    sentry-rails (5.28.1)
+      railties (>= 5.0)
+      sentry-ruby (~> 5.28.1)
+    sentry-ruby (5.28.1)
+      bigdecimal
+      concurrent-ruby (~> 1.0, >= 1.0.2)
+    sentry-sidekiq (5.28.1)
+      sentry-ruby (~> 5.28.1)
+      sidekiq (>= 3.0)
     shoulda-matchers (7.0.1)
       activesupport (>= 7.1)
     sidekiq (7.3.10)
@@ -441,6 +450,9 @@ DEPENDENCIES
   rails (~> 8.1.1)
   rspec-rails (~> 7.0)
   rubocop-rails-omakase
+  sentry-rails (~> 5.17)
+  sentry-ruby (~> 5.17)
+  sentry-sidekiq (~> 5.17)
   shoulda-matchers
   sidekiq (~> 7.2)
   simplecov
@@ -589,6 +601,9 @@ CHECKSUMS
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
   ruby-vips (2.3.0) sha256=e685ec02c13969912debbd98019e50492e12989282da5f37d05f5471442f5374
   securerandom (0.4.1) sha256=cc5193d414a4341b6e225f0cb4446aceca8e50d5e1888743fac16987638ea0b1
+  sentry-rails (5.28.1) sha256=43a5f884622c60fa459ba05dc8bd22fbd5f28daaced1d00dbcfc4669eaf93807
+  sentry-ruby (5.28.1) sha256=1162d474271e8b82202c984b1116db234007a084c5b73293e921468898d07e99
+  sentry-sidekiq (5.28.1) sha256=1873d6ca4ba49086baec7a8128b322ae2c26ce892563ed625b8bfc0fa1bcd968
   shoulda-matchers (7.0.1) sha256=b4bfd8744c10e0a36c8ac1a687f921ee7e25ed529e50488d61b79a8688749c77
   sidekiq (7.3.10) sha256=781eb4f65ef36042534ad73d72f211283afb7fee82eec786ada4ed1972ef8e3c
   simplecov (0.22.0) sha256=fe2622c7834ff23b98066bb0a854284b2729a569ac659f82621fc22ef36213a5

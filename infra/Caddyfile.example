@@ -1,15 +1,11 @@
+# CourierX Caddyfile — automatic HTTPS reverse proxy
+# Usage: mount as /etc/caddy/Caddyfile in the caddy container
+# Replace domain names with your actual domains.
+
+# API / Control Plane
 api.courierx.dev {
-    reverse_proxy api:3000
-    
-    # Rate limiting
-    rate_limit {
-        zone static_rl {
-            key {remote_host}
-            events 100
-            window 1m
-        }
-    }
-    
+    reverse_proxy control-plane:4000
+
     # Security headers
     header {
         X-Content-Type-Options nosniff
@@ -17,10 +13,31 @@ api.courierx.dev {
         X-XSS-Protection "1; mode=block"
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
     }
-    
-    # Logging
+
     log {
-        output file /var/log/caddy/access.log
+        output file /var/log/caddy/api-access.log
         format json
     }
 }
+
+# Dashboard (Next.js)
+app.courierx.dev {
+    reverse_proxy dashboard:3000
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    log {
+        output file /var/log/caddy/app-access.log
+        format json
+    }
+}
+
+# Core Engine — internal only, not publicly exposed
+# Uncomment only if you need direct external access (e.g. for debugging)
+# engine.courierx.dev {
+#     reverse_proxy core-go:8080
+# }

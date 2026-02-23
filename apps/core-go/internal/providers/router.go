@@ -3,24 +3,39 @@ package providers
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"sort"
+	"time"
 
 	"github.com/courierx/core-go/internal/types"
 )
 
-// Router handles provider selection and failover
+// RouterRecorder is implemented by observability.Prom. Keeping it as an
+// interface lets the router stay decoupled from the Prometheus package.
+type RouterRecorder interface {
+	RecordSend(provider string, success bool, latencySeconds float64)
+	RecordFailover(from, to string)
+}
+
+// Router selects providers and performs automatic failover.
 type Router struct {
-	routes []types.Route
+	routes   []types.Route // sorted by Priority ascending
+	recorder RouterRecorder
 }
 
-// NewRouter creates a new provider router
-func NewRouter(routes []types.Route) *Router {
-	return &Router{
-		routes: routes,
-	}
+// NewRouter creates a Router with the given provider routes and optional recorder.
+func NewRouter(routes []types.Route, recorder RouterRecorder) *Router {
+	sorted := make([]types.Route, len(routes))
+	copy(sorted, routes)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Priority < sorted[j].Priority
+	})
+	return &Router{routes: sorted, recorder: recorder}
 }
 
-// Send attempts to send an email through available providers with failover
+// Send attempts to deliver the email through the route chain.
+// On transient / rate-limit errors it advances to the next provider.
+// On permanent errors it stops immediately.
 func (r *Router) Send(ctx context.Context, req *types.SendRequest) (*types.SendResponse, error) {
 	if len(r.routes) == 0 {
 		return nil, fmt.Errorf("no provider routes configured")
@@ -28,40 +43,61 @@ func (r *Router) Send(ctx context.Context, req *types.SendRequest) (*types.SendR
 
 	var lastErr error
 
-	// Try each provider in priority order
 	for i, route := range r.routes {
+		providerName := string(route.Provider.Type)
+
 		provider, err := NewProvider(route.Provider)
 		if err != nil {
-			log.Printf("Failed to create provider %s: %v", route.Provider.Type, err)
+			slog.Error("failed to create provider", "provider", providerName, "error", err)
 			lastErr = err
 			continue
 		}
 
-		// Attempt to send
+		start := time.Now()
 		resp, err := provider.Send(ctx, req)
+		latencySec := time.Since(start).Seconds()
+
 		if err == nil {
-			// Success!
+			if r.recorder != nil {
+				r.recorder.RecordSend(providerName, true, latencySec)
+			}
+			resp.DurationMs = int64(latencySec * 1000)
 			if i > 0 {
-				log.Printf("Successfully sent via fallback provider: %s", provider.Name())
+				slog.Info("sent via fallback provider",
+					"provider", providerName,
+					"latency_ms", resp.DurationMs)
 			}
 			return resp, nil
 		}
 
-		// Classify the error
-		classification := ClassifyError(err)
-
-		log.Printf("Provider %s failed: %v (classification: %s)", provider.Name(), err, classification)
-		lastErr = err
-
-		// If error is permanent, don't try other providers
-		if classification == ErrorPermanent {
-			return nil, fmt.Errorf("permanent error from %s: %w", provider.Name(), err)
+		// Record failure
+		if r.recorder != nil {
+			r.recorder.RecordSend(providerName, false, latencySec)
 		}
 
-		// For transient errors, continue to next provider
-		log.Printf("Attempting failover to next provider...")
+		classification := ClassifyError(err)
+		slog.Warn("provider send failed",
+			"provider", providerName,
+			"classification", string(classification),
+			"error", err)
+		lastErr = err
+
+		// Permanent errors — stop immediately
+		if classification == ErrorPermanent {
+			return nil, fmt.Errorf("permanent error from %s: %w", providerName, err)
+		}
+
+		// Transient / rate-limit — try next provider
+		if i < len(r.routes)-1 {
+			nextProvider := string(r.routes[i+1].Provider.Type)
+			slog.Info("failing over to next provider",
+				"from", providerName,
+				"to", nextProvider)
+			if r.recorder != nil {
+				r.recorder.RecordFailover(providerName, nextProvider)
+			}
+		}
 	}
 
-	// All providers failed
 	return nil, fmt.Errorf("all providers failed, last error: %w", lastErr)
 }

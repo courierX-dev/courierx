@@ -1,0 +1,38 @@
+# CourierX Core Engine — Fly.io deployment
+# Deploy: fly deploy --config infra/fly.core.toml
+# This is an internal-only service (no public HTTP).
+# The control plane connects via Fly private networking.
+
+app = "courierx-core"
+primary_region = "iad"
+
+[build]
+  dockerfile = "infra/docker/Dockerfile.go"
+
+[env]
+  GO_ENV = "production"
+  PORT = "8080"
+  CONTROL_PLANE_URL = "http://courierx-control-plane.internal:4000"
+  LOG_LEVEL = "info"
+  MAX_WORKERS = "100"
+  ENABLE_METRICS = "true"
+
+[http_service]
+  internal_port = 8080
+  force_https = false
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

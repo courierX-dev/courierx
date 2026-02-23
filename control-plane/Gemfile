@@ -27,6 +27,11 @@ gem "dotenv", groups: [ :development, :test ]
 # Rate Limiting
 gem "rack-attack"
 
+# Error Tracking & Monitoring
+gem "sentry-ruby", "~> 5.17"
+gem "sentry-rails", "~> 5.17"
+gem "sentry-sidekiq", "~> 5.17"
+
 # Database-backed adapters
 gem "solid_cache"
 gem "solid_queue"

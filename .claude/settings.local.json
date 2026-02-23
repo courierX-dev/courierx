@@ -24,7 +24,12 @@
       "Bash(bin/rails generate:*)",
       "Bash(chmod:*)",
       "Bash(ls:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "WebFetch(domain:www.courierx.dev)",
+      "Bash(cd /Users/user/Code/courierx/apps/dashboard && npx tsc --noEmit 2>&1)",
+      "Bash(npx tsc:*)",
+      "Bash(tail:*)",
+      "Bash(go test:*)"
     ]
   }
 }

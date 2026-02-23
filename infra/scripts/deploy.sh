@@ -28,6 +28,7 @@ REQUIRED_VARS=(
     "JWT_SECRET"
     "ENCRYPTION_KEY"
     "SECRET_KEY_BASE"
+    "FRONTEND_URL"
 )
 
 echo -e "\n${YELLOW}Validating environment variables...${NC}"

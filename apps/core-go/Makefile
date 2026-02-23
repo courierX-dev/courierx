@@ -1,114 +1,140 @@
-.PHONY: test test-verbose test-coverage test-race test-unit test-integration bench lint fmt clean build run
+.PHONY: build run run-local dev test test-verbose test-coverage test-race \
+        test-unit test-integration bench lint fmt clean deps dev-tools \
+        security check watch docker-build docker-run help
 
-# Test commands
+BINARY := courierx-core
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+
+build:
+	@echo "Building $(BINARY)..."
+	go build -ldflags="-s -w" -o $(BINARY) .
+
+build-debug:
+	@echo "Building $(BINARY) (debug)..."
+	go build -o $(BINARY) .
+
+# ── Run ───────────────────────────────────────────────────────────────────────
+
+# Run with Phase-injected environment (requires `phase` CLI)
+run:
+	@echo "Starting server via Phase..."
+	phase run -- go run .
+
+# Run without Phase (reads from .env manually or uses system env)
+run-local:
+	@echo "Starting server (local env)..."
+	go run .
+
+# Live-reload via air + Phase
+dev:
+	@echo "Starting dev server with live-reload (Phase + air)..."
+	phase run -- air
+
+# ── Test ──────────────────────────────────────────────────────────────────────
+
 test:
 	@echo "Running tests..."
 	go test ./... -v
 
 test-verbose:
-	@echo "Running tests with verbose output..."
 	go test ./... -v -count=1
 
 test-coverage:
 	@echo "Running tests with coverage..."
 	go test ./... -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: coverage.html"
+	@echo "Coverage report: coverage.html"
 
 test-race:
 	@echo "Running tests with race detector..."
 	go test ./... -race
 
 test-unit:
-	@echo "Running unit tests only..."
 	go test ./... -short
 
 test-integration:
-	@echo "Running integration tests..."
 	go test ./... -run Integration
 
 bench:
 	@echo "Running benchmarks..."
-	go test ./... -bench=. -benchmem
+	go test ./... -bench=. -benchmem -run=^$
 
-# Linting and formatting
+# ── Quality ───────────────────────────────────────────────────────────────────
+
 lint:
-	@echo "Running linter..."
 	golangci-lint run
 
 fmt:
-	@echo "Formatting code..."
 	gofmt -s -w .
 	go mod tidy
 
-# Build and run
-build:
-	@echo "Building..."
-	go build -o courierx-core cmd/server/main.go
+security:
+	gosec ./...
 
-run:
-	@echo "Running server..."
-	go run cmd/server/main.go
+# Full pre-commit check
+check: fmt lint test-race
+	@echo "✓ All checks passed"
 
-# Clean
-clean:
-	@echo "Cleaning..."
-	rm -f courierx-core coverage.out coverage.html
-	go clean
+# ── Deps ──────────────────────────────────────────────────────────────────────
 
-# Install dependencies
 deps:
-	@echo "Installing dependencies..."
 	go mod download
 	go mod verify
 
-# Install development tools
 dev-tools:
 	@echo "Installing development tools..."
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install github.com/securego/gosec/v2/cmd/gosec@latest
+	go install github.com/air-verse/air@latest
+	@echo "Install Phase CLI: https://docs.phase.dev/cli/install"
 
-# Security check
-security:
-	@echo "Running security checks..."
-	gosec ./...
+# ── Clean ─────────────────────────────────────────────────────────────────────
 
-# All checks (before commit)
-check: fmt lint test-race
-	@echo "All checks passed!"
+clean:
+	rm -f $(BINARY) coverage.out coverage.html
+	go clean -testcache
 
-# Watch mode (requires air)
+# ── Watch (live-reload, no Phase) ─────────────────────────────────────────────
+
 watch:
 	air
 
-# Database commands
-db-migrate:
-	@echo "Running migrations..."
-	# Add your migration command here
+# ── Docker ───────────────────────────────────────────────────────────────────
 
-db-seed:
-	@echo "Seeding database..."
-	# Add your seed command here
-
-# Docker commands
 docker-build:
 	docker build -t courierx-core:latest .
 
 docker-run:
-	docker run -p 8080:8080 courierx-core:latest
+	docker run -p 8080:8080 --env-file .env courierx-core:latest
 
-# Help
+# ── Help ──────────────────────────────────────────────────────────────────────
+
 help:
-	@echo "Available commands:"
-	@echo "  make test            - Run all tests"
-	@echo "  make test-coverage   - Run tests with coverage report"
-	@echo "  make test-race       - Run tests with race detector"
-	@echo "  make bench           - Run benchmarks"
-	@echo "  make lint            - Run linter"
-	@echo "  make fmt             - Format code"
-	@echo "  make build           - Build the application"
-	@echo "  make run             - Run the application"
-	@echo "  make clean           - Clean build artifacts"
-	@echo "  make check           - Run all checks (fmt, lint, test)"
-	@echo "  make security        - Run security checks"
-	@echo "  make docker-build    - Build Docker image"
+	@echo ""
+	@echo "  CourierX Core — available targets"
+	@echo ""
+	@echo "  Build"
+	@echo "    make build          Build production binary"
+	@echo "    make build-debug    Build with debug info"
+	@echo ""
+	@echo "  Run"
+	@echo "    make run            Start via Phase (injects env)"
+	@echo "    make run-local      Start without Phase"
+	@echo "    make dev            Live-reload via air + Phase"
+	@echo ""
+	@echo "  Test"
+	@echo "    make test           Run all tests"
+	@echo "    make test-coverage  Coverage report (coverage.html)"
+	@echo "    make test-race      Race detector"
+	@echo "    make bench          Benchmarks"
+	@echo ""
+	@echo "  Quality"
+	@echo "    make check          fmt + lint + test-race (pre-commit)"
+	@echo "    make lint           golangci-lint"
+	@echo "    make security       gosec"
+	@echo ""
+	@echo "  Deps"
+	@echo "    make deps           Download & verify modules"
+	@echo "    make dev-tools      Install golangci-lint, gosec, air"
+	@echo ""

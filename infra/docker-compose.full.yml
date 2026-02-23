@@ -1,4 +1,6 @@
-version: '3.8'
+# CourierX All-In-One Docker Compose
+# Runs every service with Caddy for automatic HTTPS.
+# Use with: docker compose -f infra/docker-compose.full.yml up -d
 
 services:
   postgres:
@@ -6,34 +8,107 @@ services:
     environment:
       POSTGRES_DB: courierx
       POSTGRES_USER: courierx
-      POSTGRES_PASSWORD: courierx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-courierx_dev_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U courierx"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - courierx
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     networks:
       - courierx
+    restart: unless-stopped
 
-  api:
+  control-plane:
     build:
       context: ..
-      dockerfile: apps/api/Dockerfile
+      dockerfile: infra/docker/Dockerfile.rails
     environment:
-      DATABASE_URL: "postgresql://courierx:courierx@postgres:5432/courierx"
-      NODE_ENV: production
-      PORT: 3000
-    ports:
-      - "3000:3000"
+      DATABASE_URL: postgresql://courierx:${POSTGRES_PASSWORD:-courierx_dev_password}@postgres:5432/courierx
+      REDIS_URL: redis://redis:6379/0
+      RAILS_ENV: ${RAILS_ENV:-production}
+      PORT: 4000
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GO_CORE_URL: http://core-go:8080
+      GO_CORE_SECRET: ${GO_CORE_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - courierx
+    restart: unless-stopped
+    command: >
+      sh -c "
+        bundle exec rails db:prepare &&
+        bundle exec rails server -b 0.0.0.0 -p 4000
+      "
+
+  core-go:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.go
+    environment:
+      DATABASE_URL: postgresql://courierx:${POSTGRES_PASSWORD:-courierx_dev_password}@postgres:5432/courierx
+      REDIS_URL: redis://redis:6379/0
+      PORT: 8080
+      GO_ENV: ${GO_ENV:-production}
+      INTERNAL_SECRET: ${GO_CORE_SECRET}
+      CONTROL_PLANE_URL: http://control-plane:4000
+      LOG_LEVEL: info
+      MAX_WORKERS: ${MAX_WORKERS:-100}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      control-plane:
+        condition: service_started
+    networks:
+      - courierx
+    restart: unless-stopped
+
+  sidekiq:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.rails
+    environment:
+      DATABASE_URL: postgresql://courierx:${POSTGRES_PASSWORD:-courierx_dev_password}@postgres:5432/courierx
+      REDIS_URL: redis://redis:6379/0
+      RAILS_ENV: ${RAILS_ENV:-production}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GO_CORE_URL: http://core-go:8080
+      GO_CORE_SECRET: ${GO_CORE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - courierx
+    restart: unless-stopped
+    command: bundle exec sidekiq
 
   caddy:
     image: caddy:2-alpine
@@ -45,15 +120,17 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      - control-plane
+      - core-go
     networks:
       - courierx
+    restart: unless-stopped
+
+networks:
+  courierx:
 
 volumes:
   postgres_data:
   redis_data:
   caddy_data:
   caddy_config:
-
-networks:
-  courierx:

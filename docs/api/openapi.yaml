@@ -1,0 +1,1702 @@
+openapi: 3.0.3
+info:
+  title: CourierX Control Plane API
+  description: |
+    The CourierX Control Plane API manages tenants, provider connections,
+    email sending, domains, routing, webhooks, MCP integrations, and more.
+
+    ## Authentication
+    Most endpoints require authentication via **JWT Bearer token** or **API Key**.
+    - JWT: Obtain via `POST /api/v1/auth/login`, send as `Authorization: Bearer <token>`
+    - API Key: Create via the API Keys endpoint, send as `Authorization: Bearer cxk_live_...`
+
+    Public endpoints (waitlist, billing webhooks) require no authentication.
+
+    ## Super Admin
+    Super admin endpoints use a static API key (`SUPER_ADMIN_API_KEY` in Phase).
+    Pass it as `Authorization: Bearer <super_admin_key>`.
+  version: 1.0.0
+  contact:
+    name: CourierX
+    url: https://courierx.dev
+
+servers:
+  - url: http://localhost:4000
+    description: Local development (via `phase run`)
+
+tags:
+  - name: Auth
+    description: Registration, login, and session
+  - name: Waitlist
+    description: Public pre-launch waitlist
+  - name: Dashboard
+    description: Aggregated metrics for the overview page
+  - name: API Keys
+    description: Manage API keys for programmatic access
+  - name: Provider Connections
+    description: Configure email provider connections (SendGrid, SES, Mailgun, etc.)
+  - name: Domains
+    description: Manage and verify sending domains
+  - name: Routing Rules
+    description: Configure email routing strategies
+  - name: Emails
+    description: Send emails and view delivery status
+  - name: Suppressions
+    description: Manage the suppression (bounce/complaint) list
+  - name: Webhook Endpoints
+    description: Configure outbound webhook notifications
+  - name: MCP Connections
+    description: Manage AI agent connections via Model Context Protocol
+  - name: Usage Stats
+    description: View pre-aggregated daily usage statistics
+  - name: Billing Webhooks
+    description: Webhook receiver for Lemon Squeezy / Paddle payment events
+  - name: "Admin: Tenants"
+    description: Super admin portal for managing all tenants, plans, and limits
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from /auth/login or API key (cxk_live_...)
+    superAdminAuth:
+      type: http
+      scheme: bearer
+      description: Static super admin API key (SUPER_ADMIN_API_KEY env var)
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        errors:
+          type: array
+          items:
+            type: string
+
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+          format: email
+        mode:
+          type: string
+          enum: [demo, byok, managed]
+        status:
+          type: string
+          enum: [active, suspended, pending_compliance]
+        plan:
+          type: string
+          enum: [free, starter, pro, enterprise]
+        plan_email_limit:
+          type: integer
+          description: Maximum emails per billing period
+        billing_provider:
+          type: string
+          enum: [lemonsqueezy, paddle]
+          nullable: true
+        billing_customer_id:
+          type: string
+          nullable: true
+        billing_subscription_id:
+          type: string
+          nullable: true
+        current_period_ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        settings:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        key_prefix:
+          type: string
+        status:
+          type: string
+          enum: [active, revoked, expired]
+        scopes:
+          type: array
+          items:
+            type: string
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ProviderConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [sendgrid, mailgun, aws_ses, resend, postmark, smtp]
+        mode:
+          type: string
+          enum: [byok, managed]
+        status:
+          type: string
+          enum: [active, inactive, degraded, banned]
+        display_name:
+          type: string
+        weight:
+          type: integer
+        priority:
+          type: integer
+        success_rate:
+          type: number
+          nullable: true
+        avg_latency_ms:
+          type: integer
+          nullable: true
+        consecutive_failures:
+          type: integer
+        last_health_check_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Domain:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+        status:
+          type: string
+          enum: [pending, verified, failed]
+        verification_token:
+          type: string
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        spf_record:
+          type: string
+          nullable: true
+        dkim_selector:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    RoutingRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        strategy:
+          type: string
+          enum: [priority, weighted, round_robin, failover_only]
+        is_default:
+          type: boolean
+        is_active:
+          type: boolean
+        match_from_domain:
+          type: string
+          nullable: true
+        match_tag:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Email:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        from_email:
+          type: string
+        to_email:
+          type: string
+        subject:
+          type: string
+        status:
+          type: string
+          enum:
+            [queued, sent, delivered, bounced, complained, failed, suppressed]
+        provider_message_id:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        queued_at:
+          type: string
+          format: date-time
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    EmailEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum:
+            [
+              delivered,
+              bounced,
+              complained,
+              opened,
+              clicked,
+              unsubscribed,
+              failed,
+            ]
+        occurred_at:
+          type: string
+          format: date-time
+        provider:
+          type: string
+        bounce_type:
+          type: string
+          nullable: true
+        bounce_code:
+          type: string
+          nullable: true
+        link_url:
+          type: string
+          nullable: true
+
+    Suppression:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        reason:
+          type: string
+          enum: [hard_bounce, soft_bounce, complaint, unsubscribe, manual]
+        note:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    WebhookEndpoint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        events:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+
+    McpConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        client_id:
+          type: string
+        status:
+          type: string
+          enum: [connected, disconnected, error]
+        permissions:
+          type: array
+          items:
+            type: string
+        total_emails_sent:
+          type: integer
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    UsageStat:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        provider:
+          type: string
+          nullable: true
+        sent:
+          type: integer
+        delivered:
+          type: integer
+        bounced:
+          type: integer
+        complained:
+          type: integer
+        failed:
+          type: integer
+        opened:
+          type: integer
+        clicked:
+          type: integer
+
+    WaitlistEntry:
+      type: object
+      properties:
+        position:
+          type: integer
+        referral_code:
+          type: string
+        referral_link:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, invited]
+        people_ahead:
+          type: integer
+        referral_count:
+          type: integer
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ═══════════════════════════════════════════
+  # AUTH
+  # ═══════════════════════════════════════════
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new tenant
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name:
+                  type: string
+                  example: Acme Corp
+                email:
+                  type: string
+                  format: email
+                  example: admin@acme.com
+                mode:
+                  type: string
+                  enum: [demo, byok, managed]
+                  default: demo
+      responses:
+        "201":
+          description: Tenant created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant:
+                    $ref: "#/components/schemas/Tenant"
+                  token:
+                    type: string
+                    description: JWT token
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and receive JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant:
+                    $ref: "#/components/schemas/Tenant"
+                  token:
+                    type: string
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current tenant info
+      responses:
+        "200":
+          description: Current tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant:
+                    $ref: "#/components/schemas/Tenant"
+        "401":
+          description: Unauthorized
+
+  # ═══════════════════════════════════════════
+  # WAITLIST
+  # ═══════════════════════════════════════════
+
+  /api/v1/waitlist:
+    post:
+      tags: [Waitlist]
+      summary: Join the waitlist
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                company:
+                  type: string
+                use_case:
+                  type: string
+                  enum: [transactional, marketing, both]
+                referral_code:
+                  type: string
+                  description: Referral code from an existing waitlist member
+      responses:
+        "201":
+          description: Added to waitlist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  position:
+                    type: integer
+                  referral_code:
+                    type: string
+                  referral_link:
+                    type: string
+        "422":
+          description: Validation error (e.g. duplicate email)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/waitlist/status:
+    get:
+      tags: [Waitlist]
+      summary: Check waitlist position
+      security: []
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: Waitlist status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitlistEntry"
+        "404":
+          description: Email not found on waitlist
+
+  # ═══════════════════════════════════════════
+  # DASHBOARD
+  # ═══════════════════════════════════════════
+
+  /api/v1/dashboard/metrics:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard overview metrics
+      description: Returns aggregated metrics for the last 7 days including delivery rates, daily breakdowns, and provider health.
+      responses:
+        "200":
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: object
+                    properties:
+                      from:
+                        type: string
+                        format: date
+                      to:
+                        type: string
+                        format: date
+                  totals:
+                    type: object
+                    properties:
+                      sent:
+                        type: integer
+                      delivered:
+                        type: integer
+                      bounced:
+                        type: integer
+                      complained:
+                        type: integer
+                      failed:
+                        type: integer
+                      opened:
+                        type: integer
+                      clicked:
+                        type: integer
+                  rates:
+                    type: object
+                    properties:
+                      delivery_rate:
+                        type: number
+                      open_rate:
+                        type: number
+                  daily:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        sent:
+                          type: integer
+                        delivered:
+                          type: integer
+                        bounced:
+                          type: integer
+                        opened:
+                          type: integer
+                  providers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProviderConnection"
+
+  # ═══════════════════════════════════════════
+  # API KEYS
+  # ═══════════════════════════════════════════
+
+  /api/v1/api_keys:
+    get:
+      tags: [API Keys]
+      summary: List all API keys
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiKey"
+    post:
+      tags: [API Keys]
+      summary: Create a new API key
+      description: Returns the raw key **once** — it is never stored and cannot be retrieved again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "201":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiKey"
+                  - type: object
+                    properties:
+                      raw_key:
+                        type: string
+                        description: The full API key — shown only once
+
+  /api/v1/api_keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Delete an API key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /api/v1/api_keys/{id}/revoke:
+    patch:
+      tags: [API Keys]
+      summary: Revoke an API key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Key revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKey"
+
+  # ═══════════════════════════════════════════
+  # PROVIDER CONNECTIONS
+  # ═══════════════════════════════════════════
+
+  /api/v1/provider_connections:
+    get:
+      tags: [Provider Connections]
+      summary: List provider connections
+      responses:
+        "200":
+          description: Provider connections ordered by priority
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderConnection"
+    post:
+      tags: [Provider Connections]
+      summary: Create a provider connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, mode]
+              properties:
+                provider:
+                  type: string
+                  enum: [sendgrid, mailgun, aws_ses, resend, postmark, smtp]
+                mode:
+                  type: string
+                  enum: [byok, managed]
+                display_name:
+                  type: string
+                weight:
+                  type: integer
+                  default: 100
+                priority:
+                  type: integer
+                  default: 1
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderConnection"
+
+  /api/v1/provider_connections/{id}:
+    get:
+      tags: [Provider Connections]
+      summary: Get a provider connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Provider connection details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderConnection"
+    patch:
+      tags: [Provider Connections]
+      summary: Update a provider connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+                weight:
+                  type: integer
+                priority:
+                  type: integer
+                status:
+                  type: string
+                  enum: [active, inactive, degraded]
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderConnection"
+    delete:
+      tags: [Provider Connections]
+      summary: Delete a provider connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  # ═══════════════════════════════════════════
+  # DOMAINS
+  # ═══════════════════════════════════════════
+
+  /api/v1/domains:
+    get:
+      tags: [Domains]
+      summary: List domains
+      responses:
+        "200":
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Domain"
+    post:
+      tags: [Domains]
+      summary: Add a sending domain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain]
+              properties:
+                domain:
+                  type: string
+                  example: mail.acme.com
+      responses:
+        "201":
+          description: Domain added (pending verification)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+
+  /api/v1/domains/{id}:
+    get:
+      tags: [Domains]
+      summary: Get domain details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Domain details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+    delete:
+      tags: [Domains]
+      summary: Remove a domain
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /api/v1/domains/{id}/verify:
+    post:
+      tags: [Domains]
+      summary: Verify a domain
+      description: Triggers DNS verification for SPF, DKIM, and DMARC records.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Domain verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+
+  # ═══════════════════════════════════════════
+  # ROUTING RULES
+  # ═══════════════════════════════════════════
+
+  /api/v1/routing_rules:
+    get:
+      tags: [Routing Rules]
+      summary: List routing rules
+      responses:
+        "200":
+          description: Routing rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RoutingRule"
+    post:
+      tags: [Routing Rules]
+      summary: Create a routing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, strategy]
+              properties:
+                name:
+                  type: string
+                strategy:
+                  type: string
+                  enum: [priority, weighted, round_robin, failover_only]
+                is_default:
+                  type: boolean
+                match_from_domain:
+                  type: string
+                match_tag:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
+
+  /api/v1/routing_rules/{id}:
+    get:
+      tags: [Routing Rules]
+      summary: Get a routing rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Routing rule details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
+    patch:
+      tags: [Routing Rules]
+      summary: Update a routing rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                strategy:
+                  type: string
+                is_active:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
+    delete:
+      tags: [Routing Rules]
+      summary: Delete a routing rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  # ═══════════════════════════════════════════
+  # EMAILS
+  # ═══════════════════════════════════════════
+
+  /api/v1/emails:
+    get:
+      tags: [Emails]
+      summary: List emails with filters
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              [queued, sent, delivered, bounced, complained, failed, suppressed]
+        - name: recipient
+          in: query
+          schema:
+            type: string
+          description: Partial match on to_email
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: List of emails
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Email"
+    post:
+      tags: [Emails]
+      summary: Send an email
+      description: |
+        Validates the request, checks the suppression list, creates the email record,
+        and enqueues it for delivery via the Go send engine.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from_email, to_email, subject]
+              properties:
+                from_email:
+                  type: string
+                  format: email
+                from_name:
+                  type: string
+                to_email:
+                  type: string
+                  format: email
+                to_name:
+                  type: string
+                reply_to:
+                  type: string
+                  format: email
+                subject:
+                  type: string
+                html_body:
+                  type: string
+                text_body:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                metadata:
+                  type: object
+      responses:
+        "202":
+          description: Email accepted for delivery
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email:
+                    $ref: "#/components/schemas/Email"
+        "422":
+          description: Validation error or recipient suppressed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/emails/{id}:
+    get:
+      tags: [Emails]
+      summary: Get email details with event timeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Email with events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Email"
+                  - type: object
+                    properties:
+                      events:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EmailEvent"
+
+  # ═══════════════════════════════════════════
+  # SUPPRESSIONS
+  # ═══════════════════════════════════════════
+
+  /api/v1/suppressions:
+    get:
+      tags: [Suppressions]
+      summary: List suppressions
+      parameters:
+        - name: reason
+          in: query
+          schema:
+            type: string
+            enum: [hard_bounce, soft_bounce, complaint, unsubscribe, manual]
+      responses:
+        "200":
+          description: Suppression list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Suppression"
+    post:
+      tags: [Suppressions]
+      summary: Add a suppression
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, reason]
+              properties:
+                email:
+                  type: string
+                  format: email
+                reason:
+                  type: string
+                  enum:
+                    [hard_bounce, soft_bounce, complaint, unsubscribe, manual]
+                note:
+                  type: string
+      responses:
+        "201":
+          description: Suppression added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Suppression"
+
+  /api/v1/suppressions/{id}:
+    delete:
+      tags: [Suppressions]
+      summary: Remove a suppression
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  # ═══════════════════════════════════════════
+  # WEBHOOK ENDPOINTS
+  # ═══════════════════════════════════════════
+
+  /api/v1/webhook_endpoints:
+    get:
+      tags: [Webhook Endpoints]
+      summary: List webhook endpoints
+      responses:
+        "200":
+          description: Webhook endpoints
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookEndpoint"
+    post:
+      tags: [Webhook Endpoints]
+      summary: Create a webhook endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                description:
+                  type: string
+                events:
+                  type: array
+                  items:
+                    type: string
+                  description: Event types to subscribe to (empty = all)
+      responses:
+        "201":
+          description: Created (signing secret auto-generated)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+
+  /api/v1/webhook_endpoints/{id}:
+    get:
+      tags: [Webhook Endpoints]
+      summary: Get webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Webhook endpoint details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+    patch:
+      tags: [Webhook Endpoints]
+      summary: Update a webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                description:
+                  type: string
+                is_active:
+                  type: boolean
+                events:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+    delete:
+      tags: [Webhook Endpoints]
+      summary: Delete a webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  # ═══════════════════════════════════════════
+  # MCP CONNECTIONS
+  # ═══════════════════════════════════════════
+
+  /api/v1/mcp_connections:
+    get:
+      tags: [MCP Connections]
+      summary: List MCP connections
+      responses:
+        "200":
+          description: MCP connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/McpConnection"
+    post:
+      tags: [MCP Connections]
+      summary: Create an MCP connection
+      description: Returns the `client_secret` **once** — store it securely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      [
+                        read_only,
+                        send_email,
+                        manage_providers,
+                        manage_suppressions,
+                        full_access,
+                      ]
+                require_approval:
+                  type: boolean
+                  default: false
+                max_emails_per_run:
+                  type: integer
+      responses:
+        "201":
+          description: MCP connection created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/McpConnection"
+                  - type: object
+                    properties:
+                      client_secret:
+                        type: string
+                        description: Shown only once
+
+  /api/v1/mcp_connections/{id}:
+    get:
+      tags: [MCP Connections]
+      summary: Get an MCP connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: MCP connection details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpConnection"
+    patch:
+      tags: [MCP Connections]
+      summary: Update an MCP connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+                  enum: [connected, disconnected]
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                require_approval:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpConnection"
+    delete:
+      tags: [MCP Connections]
+      summary: Delete an MCP connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  # ═══════════════════════════════════════════
+  # USAGE STATS
+  # ═══════════════════════════════════════════
+
+  /api/v1/usage_stats:
+    get:
+      tags: [Usage Stats]
+      summary: Get daily usage stats
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date (default 7 days ago)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date (default today)
+      responses:
+        "200":
+          description: Daily usage statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UsageStat"
+
+  # ═══════════════════════════════════════════
+  # BILLING WEBHOOKS
+  # ═══════════════════════════════════════════
+
+  /api/v1/billing/webhooks:
+    post:
+      tags: [Billing Webhooks]
+      summary: Receive payment provider webhooks
+      description: |
+        Receives and verifies webhook payloads from Lemon Squeezy or Paddle.
+        Auto-detects provider from signature headers.
+        Handles: subscription_created, subscription_updated, subscription_cancelled, payment_success.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Raw webhook payload from Lemon Squeezy or Paddle
+      responses:
+        "200":
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+        "401":
+          description: Invalid webhook signature
+
+  # ═══════════════════════════════════════════
+  # ADMIN: TENANTS
+  # ═══════════════════════════════════════════
+
+  /api/v1/admin/tenants:
+    get:
+      tags: ["Admin: Tenants"]
+      summary: List all tenants (super admin)
+      security:
+        - superAdminAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended, pending_compliance]
+        - name: plan
+          in: query
+          schema:
+            type: string
+            enum: [free, starter, pro, enterprise]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Paginated list of all tenants
+          headers:
+            X-Total-Count:
+              schema:
+                type: integer
+            X-Page:
+              schema:
+                type: integer
+            X-Per-Page:
+              schema:
+                type: integer
+            X-Total-Pages:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tenant"
+        "401":
+          description: Invalid super admin key
+
+  /api/v1/admin/tenants/{id}:
+    get:
+      tags: ["Admin: Tenants"]
+      summary: Get tenant details with stats (super admin)
+      security:
+        - superAdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Tenant with usage stats
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Tenant"
+                  - type: object
+                    properties:
+                      stats:
+                        type: object
+                        properties:
+                          emails_sent_7d:
+                            type: integer
+                          api_keys_count:
+                            type: integer
+                          providers_count:
+                            type: integer
+                          domains_count:
+                            type: integer
+    patch:
+      tags: ["Admin: Tenants"]
+      summary: Update tenant plan, limits, or status (super admin)
+      description: |
+        Allows super admins to change a tenant's plan, email limit, status, or mode.
+        Use this to upgrade/downgrade tenants or suspend abusive accounts.
+      security:
+        - superAdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan:
+                  type: string
+                  enum: [free, starter, pro, enterprise]
+                plan_email_limit:
+                  type: integer
+                status:
+                  type: string
+                  enum: [active, suspended, pending_compliance]
+                mode:
+                  type: string
+                  enum: [demo, byok, managed]
+                current_period_ends_at:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Tenant updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+        "401":
+          description: Invalid super admin key
+        "422":
+          description: Validation error

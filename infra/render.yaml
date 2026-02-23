@@ -1,21 +1,86 @@
+# CourierX Render Blueprint
+# Deploys: Control Plane (Rails), Core Engine (Go), Sidekiq worker
+# Auto-provisions PostgreSQL and Redis
+# Docs: https://render.com/docs/blueprint-spec
+
 services:
-  # CourierX API Server
+  # ── Control Plane (Rails API) ───────────────────────────────────────────────
   - type: web
-    name: courierx-api
+    name: courierx-control-plane
     runtime: docker
-    dockerfilePath: ./apps/api/Dockerfile
+    dockerfilePath: ./infra/docker/Dockerfile.rails
     dockerContext: .
     plan: starter
-    healthCheckPath: /v1/health
+    healthCheckPath: /health
     envVars:
-      - key: NODE_ENV
+      - key: RAILS_ENV
         value: production
       - key: PORT
-        value: 3000
+        value: 4000
       - key: DATABASE_URL
         fromDatabase:
           name: courierx-db
           property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: courierx-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GO_CORE_URL
+        fromService:
+          name: courierx-core
+          type: pserv
+          property: hostport
+      - key: GO_CORE_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+
+  # ── Core Engine (Go) — private, internal only ──────────────────────────────
+  - type: pserv
+    name: courierx-core
+    runtime: docker
+    dockerfilePath: ./infra/docker/Dockerfile.go
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: GO_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL
+        fromDatabase:
+          name: courierx-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: courierx-redis
+          type: redis
+          property: connectionString
+      - key: INTERNAL_SECRET
+        fromService:
+          name: courierx-control-plane
+          type: web
+          envVarKey: GO_CORE_SECRET
+      - key: CONTROL_PLANE_URL
+        fromService:
+          name: courierx-control-plane
+          type: web
+          property: host
+      - key: LOG_LEVEL
+        value: info
+      - key: MAX_WORKERS
+        value: 100
       - key: SENDGRID_API_KEY
         sync: false
       - key: MAILGUN_API_KEY
@@ -28,17 +93,62 @@ services:
         sync: false
       - key: AWS_REGION
         value: us-east-1
-      - key: SMTP_HOST
+      - key: POSTMARK_API_KEY
         sync: false
-      - key: SMTP_PORT
-        value: 587
-      - key: SMTP_USER
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PASS
-        sync: false
+
+  # ── Sidekiq (background jobs) ──────────────────────────────────────────────
+  - type: worker
+    name: courierx-sidekiq
+    runtime: docker
+    dockerfilePath: ./infra/docker/Dockerfile.rails
+    dockerContext: .
+    plan: starter
+    dockerCommand: bundle exec sidekiq
+    envVars:
+      - key: RAILS_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: courierx-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: courierx-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY_BASE
+        fromService:
+          name: courierx-control-plane
+          type: web
+          envVarKey: SECRET_KEY_BASE
+      - key: ENCRYPTION_KEY
+        fromService:
+          name: courierx-control-plane
+          type: web
+          envVarKey: ENCRYPTION_KEY
+      - key: JWT_SECRET
+        fromService:
+          name: courierx-control-plane
+          type: web
+          envVarKey: JWT_SECRET
+      - key: GO_CORE_URL
+        fromService:
+          name: courierx-core
+          type: pserv
+          property: hostport
+      - key: GO_CORE_SECRET
+        fromService:
+          name: courierx-control-plane
+          type: web
+          envVarKey: GO_CORE_SECRET
 
 databases:
   - name: courierx-db
     databaseName: courierx
     plan: starter
     postgresMajorVersion: 15
+
+# Note: Add a Redis instance named "courierx-redis" manually in the Render dashboard
+# (Render Blueprint doesn't support redis declaration as of 2025)
