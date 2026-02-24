@@ -1,24 +1,35 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { VolumeChart } from "@/components/dashboard/volume-chart"
 import { DotIndicator } from "@/components/ui/dot-indicator"
 import { cn } from "@/lib/utils"
-import { CHART_DATA, METRICS, PROVIDER_PERFORMANCE } from "@/lib/mock-data"
+import { dashboardService, type DashboardMetrics, type Period } from "@/services/dashboard.service"
 
-const RANGES = ["7d", "30d", "90d"] as const
-type Range = (typeof RANGES)[number]
-
-const STAT_CARDS = [
-  { label: "Total Sent",    value: "14,832",  delta: "+12.4%", positive: true  },
-  { label: "Delivered",     value: "14,695",  delta: "+11.9%", positive: true  },
-  { label: "Bounced",       value: "91",       delta: "-2.1%",  positive: true  },
-  { label: "Open Rate",     value: "32.4%",   delta: "+1.3%",  positive: true  },
-  { label: "Click Rate",    value: "8.7%",    delta: "+0.4%",  positive: true  },
-]
+const RANGES: Period[] = ["7d", "30d", "90d"]
 
 export default function AnalyticsPage() {
-  const [range, setRange] = useState<Range>("7d")
+  const [range, setRange]     = useState<Period>("7d")
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    dashboardService.getMetrics(range)
+      .then(setMetrics)
+      .finally(() => setLoading(false))
+  }, [range])
+
+  const chartData = metrics?.daily.map((d) => ({
+    date: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    sent:      d.sent,
+    delivered: d.delivered,
+    bounced:   d.bounced,
+  })) ?? []
+
+  const avgDeliveryRate = metrics && metrics.totals.sent > 0
+    ? metrics.rates.delivery_rate
+    : 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -48,12 +59,17 @@ export default function AnalyticsPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {STAT_CARDS.map((s) => (
-          <div key={s.label} className="rounded-lg border border-border bg-card p-3">
+        {[
+          { label: "Total Sent",    value: (metrics?.totals.sent ?? 0).toLocaleString() },
+          { label: "Delivered",     value: (metrics?.totals.delivered ?? 0).toLocaleString() },
+          { label: "Bounced",       value: (metrics?.totals.bounced ?? 0).toLocaleString() },
+          { label: "Open Rate",     value: `${metrics?.rates.open_rate ?? 0}%` },
+          { label: "Delivery Rate", value: `${metrics?.rates.delivery_rate ?? 0}%` },
+        ].map((s) => (
+          <div key={s.label} className={cn("rounded-lg border border-border bg-card p-3", loading && "animate-pulse")}>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</p>
-            <p className="mt-1 text-xl font-bold font-mono tabular-nums">{s.value}</p>
-            <p className={cn("mt-0.5 text-xs font-mono", s.positive ? "text-success" : "text-destructive")}>
-              {s.delta}
+            <p className="mt-1 text-xl font-bold font-mono tabular-nums">
+              {loading ? <span className="invisible">0</span> : s.value}
             </p>
           </div>
         ))}
@@ -75,7 +91,10 @@ export default function AnalyticsPage() {
             </span>
           </div>
         </div>
-        <VolumeChart data={CHART_DATA} />
+        {chartData.length > 0
+          ? <VolumeChart data={chartData} />
+          : <p className="py-8 text-center text-sm text-muted-foreground">No data for this period</p>
+        }
       </div>
 
       {/* Provider breakdown */}
@@ -88,66 +107,79 @@ export default function AnalyticsPage() {
             <tr className="border-b border-border">
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provider</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
-              <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Sent today</th>
-              <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Rate</th>
+              <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Success rate</th>
               <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Avg latency</th>
-              <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Priority</th>
             </tr>
           </thead>
           <tbody>
-            {PROVIDER_PERFORMANCE.map((p, i) => (
-              <tr
-                key={p.id}
-                className={cn("hover:bg-muted/20 transition-colors", i < PROVIDER_PERFORMANCE.length - 1 && "border-b border-border/50")}
-              >
-                <td className="px-4 py-2.5 text-sm font-medium">{p.name}</td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <DotIndicator status={p.status} />
-                    <span className="text-xs text-muted-foreground capitalize">{p.status}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-2.5 text-right font-mono text-sm">{p.sent_today.toLocaleString()}</td>
-                <td className={cn(
-                  "px-4 py-2.5 text-right font-mono text-sm",
-                  p.rate >= 99 ? "text-success" : p.rate >= 97 ? "text-warning" : "text-destructive",
-                )}>
-                  {p.rate}%
-                </td>
-                <td className="px-4 py-2.5 text-right font-mono text-sm text-muted-foreground">{p.latency_ms}ms</td>
-                <td className="px-4 py-2.5 text-right font-mono text-sm text-muted-foreground">#{p.priority}</td>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground animate-pulse">Loading…</td>
               </tr>
-            ))}
+            ) : !metrics?.providers.length ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground">No providers configured.</td>
+              </tr>
+            ) : (
+              metrics.providers.map((p, i) => (
+                <tr
+                  key={p.id}
+                  className={cn("hover:bg-muted/20 transition-colors", i < metrics.providers.length - 1 && "border-b border-border/50")}
+                >
+                  <td className="px-4 py-2.5 text-sm font-medium">{p.display_name ?? p.provider}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <DotIndicator status={p.status} />
+                      <span className="text-xs text-muted-foreground capitalize">{p.status}</span>
+                    </div>
+                  </td>
+                  <td className={cn(
+                    "px-4 py-2.5 text-right font-mono text-sm",
+                    p.success_rate == null ? "text-muted-foreground"
+                      : p.success_rate >= 99 ? "text-success"
+                      : p.success_rate >= 97 ? "text-warning"
+                      : "text-destructive",
+                  )}>
+                    {p.success_rate != null ? `${p.success_rate}%` : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono text-sm text-muted-foreground">
+                    {p.avg_latency_ms != null ? `${p.avg_latency_ms}ms` : "—"}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Delivery rate over time (simple bar representation) */}
-      <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-xs font-medium text-muted-foreground mb-4">Daily delivery rate</p>
-        <div className="flex items-end gap-1.5 h-16">
-          {CHART_DATA.map((d) => {
-            const rate = ((d.delivered / d.sent) * 100)
-            const height = Math.max(10, ((rate - 97) / 3) * 100)
-            return (
-              <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full rounded-sm bg-success/70 transition-all"
-                  style={{ height: `${height}%` }}
-                />
-                <span className="text-[9px] font-mono text-muted-foreground rotate-0 whitespace-nowrap">
-                  {d.date.slice(4)}
-                </span>
-              </div>
-            )
-          })}
+      {/* Daily delivery rate bars */}
+      {chartData.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-4">Daily delivery rate</p>
+          <div className="flex items-end gap-1.5 h-16">
+            {chartData.map((d) => {
+              const rate = d.sent > 0 ? (d.delivered / d.sent) * 100 : 0
+              const height = Math.max(5, ((rate - 97) / 3) * 100)
+              return (
+                <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
+                  <div
+                    className="w-full rounded-sm bg-success/70 transition-all"
+                    style={{ height: `${height}%` }}
+                  />
+                  <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">
+                    {d.date.slice(4)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+            <span>97.0%</span>
+            <span>{avgDeliveryRate}% avg</span>
+            <span>100%</span>
+          </div>
         </div>
-        <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-          <span>97.0%</span>
-          <span>{METRICS.delivery_rate}% avg</span>
-          <span>100%</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

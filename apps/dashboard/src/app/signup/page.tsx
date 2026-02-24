@@ -6,6 +6,7 @@ import { Zap, CheckCircle2, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { authService } from "@/services/auth.service"
 
 const features = [
   "Multi-Provider Routing — Gmail, Outlook, SendGrid, SES & more",
@@ -25,6 +26,7 @@ export default function SignupPage() {
     tenant_name:  "",
   })
   const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState("")
 
   function set(field: string) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -34,11 +36,16 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    // TODO: authService.register(form)
-    setTimeout(() => {
+    setError("")
+    try {
+      await authService.register({ name: form.tenant_name, email: form.email })
+      window.location.href = "/dashboard/overview"
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { errors?: string[] } } }
+      setError(apiErr.response?.data?.errors?.[0] ?? "Failed to create account. Please try again.")
+    } finally {
       setLoading(false)
-      window.location.href = "/dashboard"
-    }, 900)
+    }
   }
 
   return (
@@ -180,6 +187,10 @@ export default function SignupPage() {
                 required
               />
             </div>
+
+            {error && (
+              <p className="text-xs text-destructive">{error}</p>
+            )}
 
             <Button type="submit" className="w-full gap-2" disabled={loading}>
               {loading ? "Creating account…" : (

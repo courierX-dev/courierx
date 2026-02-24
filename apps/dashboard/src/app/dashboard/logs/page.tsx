@@ -1,41 +1,66 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Search } from "lucide-react"
+import { useState, useMemo, useEffect, useCallback } from "react"
+import { Search, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { LOGS } from "@/lib/mock-data"
+import { emailsService, type EmailListItem } from "@/services/emails.service"
 
-const ALL_STATUSES = ["all", "delivered", "opened", "clicked", "bounced", "failed", "queued"]
-const ALL_PROVIDERS = ["all", "SES", "SendGrid", "Mailgun"]
+const ALL_STATUSES = ["all", "queued", "sent", "delivered", "bounced", "complained", "failed", "suppressed"]
 
 const STATUS_COLOR: Record<string, string> = {
-  delivered: "text-success",
-  opened:    "text-sky-500 dark:text-sky-400",
-  clicked:   "text-violet-500 dark:text-violet-400",
-  bounced:   "text-destructive",
-  failed:    "text-destructive",
-  queued:    "text-muted-foreground",
-  sent:      "text-primary",
+  delivered:  "text-success",
+  opened:     "text-sky-500 dark:text-sky-400",
+  clicked:    "text-violet-500 dark:text-violet-400",
+  bounced:    "text-destructive",
+  failed:     "text-destructive",
+  complained: "text-destructive",
+  suppressed: "text-muted-foreground",
+  queued:     "text-muted-foreground",
+  sent:       "text-primary",
 }
 
-export default function LogsPage() {
-  const [search, setSearch]     = useState("")
-  const [status, setStatus]     = useState("all")
-  const [provider, setProvider] = useState("all")
+const PER_PAGE = 25
 
-  const filtered = useMemo(() => {
-    return LOGS.filter((log) => {
-      const matchSearch =
-        !search ||
-        log.to.toLowerCase().includes(search.toLowerCase()) ||
-        log.subject.toLowerCase().includes(search.toLowerCase()) ||
-        log.id.toLowerCase().includes(search.toLowerCase())
-      const matchStatus   = status === "all"   || log.status === status
-      const matchProvider = provider === "all" || log.provider === provider
-      return matchSearch && matchStatus && matchProvider
+export default function LogsPage() {
+  const [search, setSearch]   = useState("")
+  const [status, setStatus]   = useState("all")
+  const [page, setPage]       = useState(1)
+  const [emails, setEmails]   = useState<EmailListItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchEmails = useCallback(() => {
+    setLoading(true)
+    emailsService.list({
+      page,
+      per_page: PER_PAGE,
+      status: status !== "all" ? status : undefined,
+      recipient: search || undefined,
     })
-  }, [search, status, provider])
+      .then(setEmails)
+      .finally(() => setLoading(false))
+  }, [page, status, search])
+
+  // Debounce search — refetch on status/page change immediately, search after 400ms
+  useEffect(() => {
+    const id = setTimeout(fetchEmails, search ? 400 : 0)
+    return () => clearTimeout(id)
+  }, [fetchEmails, search])
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1) }, [status, search])
+
+  // Client-side subject / ID search on the current page
+  const filtered = useMemo(() => {
+    if (!search) return emails
+    const q = search.toLowerCase()
+    return emails.filter((e) =>
+      e.to_email.toLowerCase().includes(q) ||
+      e.subject.toLowerCase().includes(q) ||
+      e.id.toLowerCase().includes(q),
+    )
+  }, [emails, search])
 
   return (
     <div className="flex flex-col gap-4">
@@ -67,16 +92,6 @@ export default function LogsPage() {
           ))}
         </select>
 
-        <select
-          value={provider}
-          onChange={(e) => setProvider(e.target.value)}
-          className="h-8 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {ALL_PROVIDERS.map((p) => (
-            <option key={p} value={p}>{p === "all" ? "All providers" : p}</option>
-          ))}
-        </select>
-
         <span className="ml-auto text-xs text-muted-foreground font-mono">
           {filtered.length} result{filtered.length !== 1 ? "s" : ""}
         </span>
@@ -92,54 +107,77 @@ export default function LogsPage() {
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recipient</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Subject</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Provider</th>
-              <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">ms</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground animate-pulse">
+                  Loading…
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
                   No messages match your filters.
                 </td>
               </tr>
             ) : (
-              filtered.map((log, i) => (
+              filtered.map((email, i) => (
                 <tr
-                  key={log.id}
+                  key={email.id}
                   className={cn(
                     "hover:bg-muted/20 transition-colors cursor-default",
                     i < filtered.length - 1 && "border-b border-border/50",
                   )}
                 >
                   <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                    {log.ts}
+                    {new Date(email.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">
-                    {log.id}
+                  <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground truncate max-w-[100px]">
+                    {email.id.slice(0, 8)}…
                   </td>
                   <td className="px-4 py-2 font-mono text-xs max-w-[160px] truncate">
-                    {log.to}
+                    {email.to_email}
                   </td>
                   <td className="px-4 py-2 text-xs text-muted-foreground max-w-[200px] truncate hidden md:table-cell">
-                    {log.subject}
+                    {email.subject}
                   </td>
                   <td className="px-4 py-2">
-                    <span className={cn("text-xs font-medium capitalize", STATUS_COLOR[log.status] ?? "text-muted-foreground")}>
-                      {log.status}
+                    <span className={cn("text-xs font-medium capitalize", STATUS_COLOR[email.status] ?? "text-muted-foreground")}>
+                      {email.status}
                     </span>
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs text-muted-foreground hidden lg:table-cell">
-                    {log.provider}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground hidden lg:table-cell">
-                    {log.ms > 0 ? log.ms : "—"}
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>Page {page}</span>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1 || loading}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={emails.length < PER_PAGE || loading}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   )

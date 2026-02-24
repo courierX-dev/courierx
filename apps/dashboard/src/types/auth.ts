@@ -5,29 +5,23 @@ export interface LoginRequest {
 
 export interface RegisterRequest {
   email: string
-  password: string
-  first_name: string
-  last_name: string
-  tenant_name: string
-}
-
-export interface User {
-  id: string
-  email: string
-  first_name: string
-  last_name: string
-  role: "owner" | "admin" | "developer" | "viewer"
+  name: string
+  mode?: "demo" | "byok" | "managed"
 }
 
 export interface Tenant {
   id: string
   name: string
   slug: string
-  plan: string
+  email: string
+  mode: string
+  status: string
+  plan_id: string | null
+  settings: Record<string, unknown>
+  created_at: string
 }
 
 export interface AuthResponse {
-  user: User
   tenant: Tenant
   token: string
 }

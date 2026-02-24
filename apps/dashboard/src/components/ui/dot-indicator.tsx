@@ -15,13 +15,27 @@ const dotColor: Record<string, string> = {
   queued:     "bg-muted-foreground/40",
 }
 
+const PULSE_STATUSES = new Set(["healthy", "active", "verified"])
+
 interface DotIndicatorProps {
   status: string
   className?: string
 }
 
 export function DotIndicator({ status, className }: DotIndicatorProps) {
-  const color = dotColor[status.toLowerCase()] ?? "bg-muted-foreground/40"
+  const lower = status.toLowerCase()
+  const color = dotColor[lower] ?? "bg-muted-foreground/40"
+  const shouldPulse = PULSE_STATUSES.has(lower)
+
+  if (shouldPulse) {
+    return (
+      <span className={cn("relative inline-flex h-2 w-2 flex-shrink-0", className)}>
+        <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-50", color)} />
+        <span className={cn("relative inline-flex h-2 w-2 rounded-full", color)} />
+      </span>
+    )
+  }
+
   return (
     <span
       className={cn(

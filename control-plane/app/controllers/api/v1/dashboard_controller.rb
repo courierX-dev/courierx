@@ -3,16 +3,15 @@
 module Api
   module V1
     class DashboardController < BaseController
-      # GET /api/v1/dashboard/metrics
+      # GET /api/v1/dashboard/metrics?period=7d|30d|90d
       def metrics
         tenant = current_tenant
-        today = Date.current
+        today  = Date.current
 
-        # Get usage stats for last 7 days
-        stats = UsageStat.for_period(tenant.id, from: today - 7, to: today)
+        days = { "7d" => 7, "30d" => 30, "90d" => 90 }.fetch(params[:period], 7)
+        from = today - days
 
-        # Today's stats
-        today_stat = stats.find { |s| s.date == today } || UsageStat.new
+        stats = UsageStat.for_period(tenant.id, from: from, to: today)
 
         # Totals for the period
         totals = {
@@ -29,7 +28,7 @@ module Api
         open_rate     = totals[:delivered] > 0 ? (totals[:opened].to_f / totals[:delivered] * 100).round(2) : 0
 
         render json: {
-          period: { from: (today - 7).iso8601, to: today.iso8601 },
+          period: { from: from.iso8601, to: today.iso8601 },
           totals: totals,
           rates: {
             delivery_rate: delivery_rate,

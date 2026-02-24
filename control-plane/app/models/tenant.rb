@@ -31,6 +31,14 @@ class Tenant < ApplicationRecord
   private
 
   def generate_slug
-    self.slug ||= name&.parameterize
+    return if self.slug.present?
+    
+    base_slug = name&.parameterize
+    self.slug = base_slug
+    
+    # Ensure uniqueness
+    if Tenant.exists?(slug: base_slug)
+      self.slug = "#{base_slug}-#{SecureRandom.hex(3)}"
+    end
   end
 end

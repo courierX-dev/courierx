@@ -6,7 +6,7 @@ module Api
       # No auth required for register/login
       skip_before_action :verify_authenticity_token, raise: false
 
-      before_action :authenticate_for_me, only: :me
+      before_action :authenticate_for_me, only: [:me, :update]
 
       # POST /api/v1/auth/register
       def register
@@ -40,10 +40,29 @@ module Api
         render json: { tenant: tenant_json(@current_tenant) }
       end
 
+      # PATCH /api/v1/auth/me
+      def update
+        if @current_tenant.update(update_params)
+          render json: { tenant: tenant_json(@current_tenant) }
+        else
+          render json: { errors: @current_tenant.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
+      # DELETE /api/v1/auth/me
+      def destroy
+        @current_tenant.destroy
+        head :no_content
+      end
+
       private
 
       def tenant_params
         params.permit(:name, :email, :mode)
+      end
+
+      def update_params
+        params.permit(:name, settings: {})
       end
 
       def tenant_json(tenant)

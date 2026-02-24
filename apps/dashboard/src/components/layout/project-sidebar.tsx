@@ -65,13 +65,16 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
+        "relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-all duration-150",
         active
           ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-          : "text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
+          : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/40",
       )}
     >
-      <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+      {active && (
+        <span className="absolute left-0 top-1 bottom-1 w-[2px] rounded-r-full bg-primary" />
+      )}
+      <Icon className={cn("h-3.5 w-3.5 flex-shrink-0", active ? "text-primary" : "")} />
       {label}
     </Link>
   )
@@ -81,11 +84,11 @@ export function ProjectSidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-52 shrink-0 border-r border-border bg-sidebar flex flex-col overflow-y-auto">
+    <aside className="w-52 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col overflow-y-auto">
       <nav className="flex-1 px-3 py-4 space-y-5">
         {NAV.map((group) => (
           <div key={group.section}>
-            <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/45">
+            <p className="px-2 mb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/40">
               {group.section}
             </p>
             <ul className="space-y-px">
@@ -104,12 +107,12 @@ export function ProjectSidebar() {
         ))}
       </nav>
 
-      <div className="px-3 py-3 border-t border-border">
+      <div className="px-3 py-3 border-t border-sidebar-border">
         <NavItem
           href="/dashboard/settings"
           label="Settings"
           icon={Settings}
-          active={pathname === "/dashboard/settings"}
+          active={pathname === "/dashboard/settings" || pathname === "/dashboard/profile"}
         />
       </div>
     </aside>

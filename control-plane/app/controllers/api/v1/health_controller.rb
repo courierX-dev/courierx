@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require "redis"
 
 module Api
   module V1
@@ -33,7 +34,7 @@ module Api
       end
 
       def check_redis
-        redis = Redis.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0"))
+        redis = ::Redis.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0"))
         redis.ping
         { status: "ok" }
       rescue StandardError => e

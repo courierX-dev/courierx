@@ -1,10 +1,170 @@
-import { Plus } from "lucide-react"
+"use client"
+
+import { useEffect, useState } from "react"
+import { Plus, Trash2, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { DotIndicator } from "@/components/ui/dot-indicator"
 import { cn } from "@/lib/utils"
-import { WEBHOOKS } from "@/lib/mock-data"
+import { webhooksService, WEBHOOK_EVENTS, type WebhookEndpoint } from "@/services/webhooks.service"
+import { toast } from "sonner"
+
+function WebhookForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: Partial<WebhookEndpoint>
+  onSave: (data: { url: string; description: string; events: string[] }) => Promise<void>
+  onCancel: () => void
+}) {
+  const [url, setUrl]          = useState(initial?.url ?? "")
+  const [description, setDesc] = useState(initial?.description ?? "")
+  const [events, setEvents]    = useState<string[]>(initial?.events ?? [])
+  const [saving, setSaving]    = useState(false)
+  const [error, setError]      = useState("")
+
+  function toggleEvent(ev: string) {
+    setEvents((prev) =>
+      prev.includes(ev) ? prev.filter((e) => e !== ev) : [...prev, ev]
+    )
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (events.length === 0) { setError("Select at least one event."); return }
+    setSaving(true)
+    setError("")
+    try {
+      await onSave({ url, description, events })
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { errors?: string[] } } }
+      setError(apiErr.response?.data?.errors?.[0] ?? "Failed to save webhook.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+      <div className="space-y-1.5">
+        <Label htmlFor="wh-url">Endpoint URL</Label>
+        <Input
+          id="wh-url"
+          type="url"
+          placeholder="https://example.com/webhooks/courierx"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          required
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="wh-desc">Description <span className="text-muted-foreground">(optional)</span></Label>
+        <Input
+          id="wh-desc"
+          placeholder="Production delivery events"
+          value={description}
+          onChange={(e) => setDesc(e.target.value)}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Events to send</Label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {WEBHOOK_EVENTS.map((ev) => (
+            <label
+              key={ev}
+              className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2 cursor-pointer hover:bg-muted/20 transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={events.includes(ev)}
+                onChange={() => toggleEvent(ev)}
+                className="h-3.5 w-3.5 accent-primary"
+              />
+              <span className="text-[11px] font-mono">{ev}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? "Saving…" : "Save webhook"}
+        </Button>
+      </div>
+    </form>
+  )
+}
 
 export default function WebhooksPage() {
+  const [webhooks, setWebhooks]           = useState<WebhookEndpoint[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [addOpen, setAddOpen]             = useState(false)
+  const [editTarget, setEditTarget]       = useState<WebhookEndpoint | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting]           = useState(false)
+
+  useEffect(() => {
+    webhooksService.list()
+      .then(setWebhooks)
+      .catch(() => toast.error("Failed to load webhooks"))
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleCreate(data: { url: string; description: string; events: string[] }) {
+    const created = await webhooksService.create(data)
+    setWebhooks((prev) => [created, ...prev])
+    setAddOpen(false)
+    toast.success("Webhook added")
+  }
+
+  async function handleUpdate(data: { url: string; description: string; events: string[] }) {
+    if (!editTarget) return
+    const updated = await webhooksService.update(editTarget.id, data)
+    setWebhooks((prev) => prev.map((w) => w.id === editTarget.id ? updated : w))
+    setEditTarget(null)
+    toast.success("Webhook updated")
+  }
+
+  async function handleToggle(w: WebhookEndpoint) {
+    try {
+      const updated = await webhooksService.update(w.id, { is_active: !w.is_active })
+      setWebhooks((prev) => prev.map((x) => x.id === w.id ? updated : x))
+      toast.success(updated.is_active ? "Webhook enabled" : "Webhook disabled")
+    } catch {
+      toast.error("Failed to update webhook")
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeleting(true)
+    try {
+      await webhooksService.delete(id)
+      setWebhooks((prev) => prev.filter((w) => w.id !== id))
+      toast.success("Webhook deleted")
+    } catch {
+      toast.error("Failed to delete webhook")
+    } finally {
+      setDeleting(false)
+      setConfirmDeleteId(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -15,7 +175,7 @@ export default function WebhooksPage() {
             Receive real-time delivery events via HTTP POST
           </p>
         </div>
-        <Button size="sm" className="h-8 gap-1.5">
+        <Button size="sm" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
           Add webhook
         </Button>
@@ -26,64 +186,114 @@ export default function WebhooksPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/20">
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Name</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">URL</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Events</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Last triggered</th>
-              <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Success</th>
+              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Added</th>
               <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>
-            {WEBHOOKS.map((w, i) => (
-              <tr
-                key={w.id}
-                className={cn(
-                  "hover:bg-muted/20 transition-colors",
-                  i < WEBHOOKS.length - 1 && "border-b border-border/50",
-                )}
-              >
-                <td className="px-4 py-2.5 text-sm font-medium">{w.name}</td>
-                <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground max-w-[200px] truncate">
-                  {w.url}
-                </td>
-                <td className="px-4 py-2.5 hidden md:table-cell">
-                  <div className="flex gap-1 flex-wrap">
-                    {w.events.map((ev) => (
-                      <span
-                        key={ev}
-                        className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
-                      >
-                        {ev}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <DotIndicator status={w.status} />
-                    <span className="text-xs capitalize">{w.status}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground hidden lg:table-cell">
-                  {w.last_triggered}
-                </td>
-                <td className="px-4 py-2.5 text-right font-mono text-xs hidden lg:table-cell">
-                  <span className={cn(
-                    w.success_rate === 100 ? "text-success" :
-                    w.success_rate >= 95 ? "text-warning" : "text-destructive",
-                  )}>
-                    {w.success_rate}%
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground">
-                    Edit
-                  </Button>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground animate-pulse">
+                  Loading…
                 </td>
               </tr>
-            ))}
+            ) : webhooks.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center">
+                  <p className="text-sm text-muted-foreground">No webhooks configured.</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Add an endpoint to receive delivery event notifications.</p>
+                </td>
+              </tr>
+            ) : (
+              webhooks.map((w, i) => (
+                <tr
+                  key={w.id}
+                  className={cn(
+                    "hover:bg-muted/20 transition-colors",
+                    i < webhooks.length - 1 && "border-b border-border/50",
+                  )}
+                >
+                  <td className="px-4 py-2.5">
+                    <p className="font-mono text-xs text-muted-foreground max-w-[200px] truncate">{w.url}</p>
+                    {w.description && (
+                      <p className="text-[11px] text-muted-foreground/60 mt-0.5">{w.description}</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 hidden md:table-cell">
+                    <div className="flex gap-1 flex-wrap">
+                      {w.events.map((ev) => (
+                        <span
+                          key={ev}
+                          className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
+                        >
+                          {ev}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <button
+                      onClick={() => handleToggle(w)}
+                      className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                      title={w.is_active ? "Click to disable" : "Click to enable"}
+                    >
+                      <DotIndicator status={w.is_active ? "active" : "inactive"} />
+                      <span className="text-xs">{w.is_active ? "Active" : "Inactive"}</span>
+                    </button>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground hidden md:table-cell">
+                    {new Date(w.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    {confirmDeleteId === w.id ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="text-xs text-muted-foreground">Delete?</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => setConfirmDeleteId(null)}
+                          disabled={deleting}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => handleDelete(w.id)}
+                          disabled={deleting}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground"
+                          onClick={() => setEditTarget(w)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => setConfirmDeleteId(w.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -94,7 +304,7 @@ export default function WebhooksPage() {
         <pre className="font-mono text-[11px] text-muted-foreground leading-relaxed overflow-x-auto">
 {`{
   "event":      "delivered",
-  "message_id": "msg_001",
+  "message_id": "msg_01j...",
   "to":         "user@example.com",
   "provider":   "SES",
   "timestamp":  "2025-02-23T14:32:01Z",
@@ -102,6 +312,41 @@ export default function WebhooksPage() {
 }`}
         </pre>
       </div>
+
+      {/* Add dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add webhook</DialogTitle>
+            <DialogDescription>
+              Configure an endpoint to receive delivery event notifications.
+            </DialogDescription>
+          </DialogHeader>
+          <WebhookForm
+            onSave={handleCreate}
+            onCancel={() => setAddOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(v) => { if (!v) setEditTarget(null) }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit webhook</DialogTitle>
+            <DialogDescription>
+              Update the endpoint URL, description, or subscribed events.
+            </DialogDescription>
+          </DialogHeader>
+          {editTarget && (
+            <WebhookForm
+              initial={editTarget}
+              onSave={handleUpdate}
+              onCancel={() => setEditTarget(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

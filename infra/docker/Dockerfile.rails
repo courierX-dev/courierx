@@ -52,12 +52,13 @@ RUN addgroup -g 1000 rails && \
 
 USER rails
 
-# Expose port
-EXPOSE 4000
+# Expose port (default 4000)
+ENV PORT=4000
+EXPOSE $PORT
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
 
 # Start server
-CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "4000"]
+CMD ["sh", "-c", "bundle exec rails server -b 0.0.0.0 -p ${PORT}"]

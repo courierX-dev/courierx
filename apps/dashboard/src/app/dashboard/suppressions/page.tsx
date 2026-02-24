@@ -1,11 +1,20 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Search, Upload, Download, Trash2 } from "lucide-react"
+import { useState, useMemo, useEffect } from "react"
+import { Search, Upload, Download, Trash2, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { SUPPRESSIONS } from "@/lib/mock-data"
+import { suppressionsService, type Suppression } from "@/services/suppressions.service"
+import { toast } from "sonner"
 
 const REASON_COLOR: Record<string, string> = {
   hard_bounce: "text-destructive",
@@ -14,16 +23,65 @@ const REASON_COLOR: Record<string, string> = {
   manual:      "text-muted-foreground",
 }
 
+const REASONS = ["hard_bounce", "soft_bounce", "complaint", "unsubscribe", "manual"]
+
 export default function SuppressionsPage() {
-  const [search, setSearch] = useState("")
+  const [suppressions, setSuppresssions] = useState<Suppression[]>([])
+  const [loading, setLoading]            = useState(true)
+  const [search, setSearch]              = useState("")
+  const [open, setOpen]                  = useState(false)
+  const [email, setEmail]                = useState("")
+  const [reason, setReason]              = useState("manual")
+  const [adding, setAdding]              = useState(false)
+  const [confirmId, setConfirmId]        = useState<string | null>(null)
+  const [deleting, setDeleting]          = useState(false)
+
+  useEffect(() => {
+    suppressionsService.list()
+      .then(setSuppresssions)
+      .catch(() => toast.error("Failed to load suppressions"))
+      .finally(() => setLoading(false))
+  }, [])
 
   const filtered = useMemo(() => {
-    if (!search) return SUPPRESSIONS
-    return SUPPRESSIONS.filter((s) =>
-      s.email.toLowerCase().includes(search.toLowerCase()) ||
-      s.reason.toLowerCase().includes(search.toLowerCase()),
+    if (!search) return suppressions
+    const q = search.toLowerCase()
+    return suppressions.filter((s) =>
+      s.email.toLowerCase().includes(q) ||
+      s.reason.toLowerCase().includes(q),
     )
-  }, [search])
+  }, [suppressions, search])
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    setAdding(true)
+    try {
+      const added = await suppressionsService.create({ email, reason })
+      setSuppresssions((prev) => [added, ...prev])
+      setOpen(false)
+      setEmail("")
+      setReason("manual")
+      toast.success("Suppression added", { description: email })
+    } catch {
+      toast.error("Failed to add suppression")
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  async function handleDelete(id: string, emailAddr: string) {
+    setDeleting(true)
+    try {
+      await suppressionsService.delete(id)
+      setSuppresssions((prev) => prev.filter((s) => s.id !== id))
+      toast.success("Suppression removed", { description: emailAddr })
+    } catch {
+      toast.error("Failed to remove suppression")
+    } finally {
+      setDeleting(false)
+      setConfirmId(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,6 +101,10 @@ export default function SuppressionsPage() {
           <Button variant="outline" size="sm" className="h-8 gap-1.5">
             <Download className="h-3.5 w-3.5" />
             Export
+          </Button>
+          <Button size="sm" className="h-8 gap-1.5" onClick={() => setOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Add
           </Button>
         </div>
       </div>
@@ -71,15 +133,27 @@ export default function SuppressionsPage() {
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Email</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Reason</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Suppressed at</th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Source</th>
               <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  No suppressions found.
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground animate-pulse">
+                  Loading…
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {search ? "No results match your search." : "No suppressions yet."}
+                  </p>
+                  {!search && (
+                    <p className="text-xs text-muted-foreground/60 mt-1">
+                      Bounced and unsubscribed emails will appear here automatically.
+                    </p>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -98,19 +172,41 @@ export default function SuppressionsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground hidden md:table-cell">
-                    {s.suppressed_at}
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground hidden lg:table-cell capitalize">
-                    {s.source}
+                    {new Date(s.created_at).toLocaleString()}
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {confirmId === s.id ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="text-xs text-muted-foreground">Remove?</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => setConfirmId(null)}
+                          disabled={deleting}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => handleDelete(s.id, s.email)}
+                          disabled={deleting}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setConfirmId(s.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))
@@ -118,6 +214,52 @@ export default function SuppressionsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Add dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add suppression</DialogTitle>
+            <DialogDescription>
+              This email address will be blocked from receiving future messages.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAdd} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="sup-email">Email address</Label>
+              <Input
+                id="sup-email"
+                type="email"
+                placeholder="user@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="sup-reason">Reason</Label>
+              <select
+                id="sup-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {REASONS.map((r) => (
+                  <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={adding}>
+                {adding ? "Adding…" : "Add suppression"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

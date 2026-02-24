@@ -1,5 +1,6 @@
 import { TopBar } from "@/components/layout/top-bar"
 import { ProjectSidebar } from "@/components/layout/project-sidebar"
+import { Toaster } from "@/components/ui/sonner"
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,6 +12,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <Toaster position="bottom-right" />
     </div>
   )
 }

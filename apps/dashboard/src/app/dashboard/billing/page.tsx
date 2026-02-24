@@ -1,8 +1,11 @@
-import { CheckCircle2, Download, ArrowUpRight, Zap } from "lucide-react"
+"use client"
+
+import { CheckCircle2, Download, ArrowUpRight, Zap, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
-import { WORKSPACE, INVOICES } from "@/lib/mock-data"
+import { useQuery } from "@tanstack/react-query"
+import api from "@/services/api"
 
 const PLAN_FEATURES = [
   "10,000 emails / month",
@@ -15,8 +18,27 @@ const PLAN_FEATURES = [
 ]
 
 export default function BillingPage() {
-  const { used, limit } = WORKSPACE.usage
+  const { data: billing, isLoading } = useQuery({
+    queryKey: ["dashboard", "billing"],
+    queryFn: async () => {
+      const { data } = await api.get("/api/v1/dashboard/billing")
+      return data
+    }
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!billing) return <div className="text-red-400">Failed to load billing metrics.</div>
+
+  const { used, limit } = billing.usage
   const pct = Math.round((used / limit) * 100)
+  const invoices = billing.invoices || []
 
   return (
     <div className="flex flex-col gap-6">
@@ -30,40 +52,52 @@ export default function BillingPage() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Plan card */}
-        <div className="rounded-lg border border-primary/25 bg-primary/[0.03] p-5 flex flex-col gap-4">
+        <div className="rounded-lg border border-primary/25 bg-primary/5 p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-6 w-6 rounded bg-primary flex items-center justify-center">
                 <Zap className="h-3 w-3 text-primary-foreground" />
               </div>
-              <span className="text-sm font-semibold">Pro Plan</span>
+              <span className="text-sm font-semibold capitalize">{billing.plan} Plan</span>
             </div>
             <StatusBadge status="active" />
           </div>
 
           <div>
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold font-mono">$79</span>
+              {billing.plan === "free" ? (
+                 <span className="text-3xl font-bold font-mono">$0</span>
+              ) : billing.plan === "starter" ? (
+                 <span className="text-3xl font-bold font-mono">$29</span>
+              ) : billing.plan === "pro" ? (
+                 <span className="text-3xl font-bold font-mono">$79</span>
+              ) : (
+                 <span className="text-3xl font-bold font-mono">Custom</span>
+              )}
               <span className="text-xs text-muted-foreground">/ month</span>
             </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">Renews March 1, 2025</p>
+            {billing.current_period_ends_at && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Renews {new Date(billing.current_period_ends_at).toLocaleDateString()}
+              </p>
+            )}
           </div>
 
           <ul className="space-y-2 flex-1">
             {PLAN_FEATURES.map((f) => (
               <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
-                <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success mt-0.5" />
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success mt-0.5" />
                 {f}
               </li>
             ))}
           </ul>
 
           <div className="flex flex-col gap-2">
-            <Button size="sm" className="w-full gap-1.5">
+            <Button size="sm" className="w-full gap-1.5" disabled>
               <ArrowUpRight className="h-3.5 w-3.5" />
               Upgrade to Enterprise
             </Button>
-            <Button size="sm" variant="ghost" className="w-full text-muted-foreground">
+            <Button size="sm" variant="ghost" className="w-full text-muted-foreground" disabled>
               Manage subscription
             </Button>
           </div>
@@ -94,15 +128,15 @@ export default function BillingPage() {
                   "h-full rounded-full transition-all",
                   pct > 90 ? "bg-destructive" : pct > 70 ? "bg-warning" : "bg-primary",
                 )}
-                style={{ width: `${pct}%` }}
+                style={{ width: `${Math.min(pct, 100)}%` }}
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              {(limit - used).toLocaleString()} emails remaining this month · Resets March 1, 2025
+              {Math.max(0, limit - used).toLocaleString()} emails remaining this month
             </p>
 
             {pct > 80 && (
-              <div className="rounded-md border border-warning/25 bg-warning/[0.06] px-3 py-2.5 text-xs text-warning-foreground">
+              <div className="rounded-md border border-warning/25 bg-warning/10 px-3 py-2.5 text-xs text-warning-foreground">
                 You&apos;ve used {pct}% of your monthly allowance.{" "}
                 <button className="font-medium underline underline-offset-4 hover:opacity-80">
                   Upgrade your plan
@@ -127,12 +161,12 @@ export default function BillingPage() {
                 </tr>
               </thead>
               <tbody>
-                {INVOICES.map((inv, i) => (
+                {invoices.map((inv: { id: string | number; date: string; amount: string; status: "paid" | "pending" | "failed" }, i: number) => (
                   <tr
-                    key={inv.id}
+                    key={String(inv.id)}
                     className={cn(
                       "hover:bg-muted/20 transition-colors",
-                      i < INVOICES.length - 1 && "border-b border-border/50",
+                      i < invoices.length - 1 && "border-b border-border/50",
                     )}
                   >
                     <td className="px-4 py-2.5 text-sm">{inv.date}</td>

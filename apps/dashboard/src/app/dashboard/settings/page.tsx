@@ -1,20 +1,87 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ModeBadge } from "@/components/ui/mode-badge"
-import { PROJECT, WORKSPACE } from "@/lib/mock-data"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import { authService } from "@/services/auth.service"
+import type { Tenant } from "@/types/auth"
+import api from "@/services/api"
+import { useToast } from "@/components/ui/use-toast"
+import { Loader2 } from "lucide-react"
+
+const NOTIFICATIONS = [
+  { id: "failover_events",   label: "Failover events",   desc: "Notify when a provider failover occurs" },
+  { id: "usage_alerts",      label: "Usage alerts",      desc: "Notify when usage exceeds 80% of plan limit" },
+  { id: "bounce_rate_spike", label: "Bounce rate spike", desc: "Notify when bounce rate exceeds 5%" },
+  { id: "weekly_summary",    label: "Weekly summary",    desc: "Weekly email summary of delivery performance" },
+]
 
 export default function SettingsPage() {
-  const [projectName, setProjectName] = useState(PROJECT.name)
-  const [saved, setSaved]             = useState(false)
+  const [tenant, setTenant]               = useState<Tenant | null>(null)
+  const [deleteOpen, setDeleteOpen]       = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState("")
+  const [isDeleting, setIsDeleting]       = useState(false)
+  const [notifications, setNotifications] = useState<Record<string, boolean>>({})
+  const { toast } = useToast()
 
-  function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  useEffect(() => {
+    fetchTenantDetails()
+  }, [])
+
+  async function fetchTenantDetails() {
+    try {
+      const data = await authService.getCurrentUser()
+      setTenant(data)
+      const settings = (data.settings || {}) as Record<string, unknown>
+      const notifs = (settings.notifications || {}) as Record<string, boolean>
+      setNotifications(notifs)
+    } catch {
+      toast({ title: "Error", description: "Could not load settings" })
+    }
+  }
+
+  async function toggleNotification(id: string, checked: boolean) {
+    const updated = { ...notifications, [id]: checked }
+    setNotifications(updated)
+
+    try {
+      await api.patch<{ tenant: Tenant }>("/api/v1/auth/me", {
+        settings: { notifications: updated }
+      })
+      toast({ title: "Settings saved", description: "Notification preferences updated." })
+    } catch {
+      toast({ title: "Error", description: "Failed to update preferences.", variant: "destructive" })
+      setNotifications(notifications) // revert
+    }
+  }
+
+  async function handleDeleteProject() {
+    if (deleteConfirm !== tenant?.name) return
+    setIsDeleting(true)
+    try {
+      await api.delete("/api/v1/auth/me")
+      // Force clear local storage and redirect
+      authService.logout()
+    } catch {
+      toast({ title: "Error", description: "Could not delete project.", variant: "destructive" })
+      setIsDeleting(false)
+    }
+  }
+
+  if (!tenant) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
@@ -22,117 +89,56 @@ export default function SettingsPage() {
       {/* Header */}
       <div>
         <h1 className="text-base font-semibold tracking-tight">Settings</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">Project configuration</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">Project configuration and preferences</p>
       </div>
 
-      {/* Project settings */}
+      {/* Project info (read-only) */}
       <section>
         <h2 className="text-sm font-semibold mb-4 pb-2 border-b border-border">Project</h2>
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="project-name">Project name</Label>
-              <Input
-                id="project-name"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Project ID</Label>
-              <div className="h-9 rounded-md border border-input bg-muted/30 px-3 flex items-center font-mono text-sm text-muted-foreground">
-                {PROJECT.id}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Mode</Label>
-              <div className="h-9 rounded-md border border-input bg-muted/30 px-3 flex items-center gap-2">
-                <ModeBadge mode={PROJECT.mode} />
-                <span className="text-xs text-muted-foreground capitalize">{PROJECT.mode}</span>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="timezone">Timezone</Label>
-              <select
-                id="timezone"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                defaultValue="UTC"
-              >
-                <option value="UTC">UTC</option>
-                <option value="America/New_York">America/New_York</option>
-                <option value="America/Los_Angeles">America/Los_Angeles</option>
-                <option value="Europe/London">Europe/London</option>
-                <option value="Asia/Tokyo">Asia/Tokyo</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm">
-              {saved ? "Saved" : "Save changes"}
-            </Button>
-            {saved && (
-              <span className="text-xs text-success">Changes saved.</span>
-            )}
-          </div>
-        </form>
-      </section>
-
-      {/* Workspace */}
-      <section>
-        <h2 className="text-sm font-semibold mb-4 pb-2 border-b border-border">Workspace</h2>
-        <div className="space-y-3">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Workspace name</Label>
-              <div className="h-9 rounded-md border border-input bg-muted/30 px-3 flex items-center text-sm text-muted-foreground">
-                {WORKSPACE.name}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Plan</Label>
-              <div className="h-9 rounded-md border border-input bg-muted/30 px-3 flex items-center gap-2">
-                <span className="inline-flex items-center rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                  {WORKSPACE.plan}
-                </span>
-                <span className="text-xs text-muted-foreground">{WORKSPACE.usage.used.toLocaleString()} / {WORKSPACE.usage.limit.toLocaleString()} emails</span>
-              </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Project slug</Label>
+            <div className="h-9 rounded-md border border-input bg-muted/30 px-3 flex items-center font-mono text-sm text-muted-foreground">
+              {tenant?.slug ?? "—"}
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Members</Label>
-            <div className="h-9 rounded-md border border-input bg-muted/30 px-3 flex items-center text-sm text-muted-foreground">
-              {WORKSPACE.member_count} members
+            <Label>Project ID</Label>
+            <div className="h-9 rounded-md border border-input bg-muted/30 px-3 flex items-center font-mono text-xs text-muted-foreground">
+              {tenant?.id ?? "—"}
             </div>
           </div>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          To update your project name, visit{" "}
+          <a href="/dashboard/profile" className="underline underline-offset-4 hover:text-foreground transition-colors">
+            Profile
+          </a>.
+        </p>
       </section>
 
       {/* Notifications */}
       <section>
         <h2 className="text-sm font-semibold mb-4 pb-2 border-b border-border">Notifications</h2>
         <div className="space-y-3">
-          {[
-            { label: "Failover events",       desc: "Notify when a provider failover occurs"        },
-            { label: "Usage alerts",           desc: "Notify when usage exceeds 80% of plan limit"   },
-            { label: "Bounce rate spike",      desc: "Notify when bounce rate exceeds 5%"            },
-            { label: "Weekly summary",         desc: "Weekly email summary of delivery performance"  },
-          ].map((item) => (
-            <label key={item.label} className="flex items-center justify-between gap-4 py-1 cursor-pointer">
-              <div>
-                <p className="text-sm">{item.label}</p>
-                <p className="text-xs text-muted-foreground">{item.desc}</p>
-              </div>
-              <input
-                type="checkbox"
-                defaultChecked
-                className="h-4 w-4 rounded border-border accent-primary"
-              />
-            </label>
-          ))}
+          {NOTIFICATIONS.map((item) => {
+            // Default to true if not explicitly set
+            const isChecked = notifications[item.id] !== false
+            return (
+              <label key={item.id} className="flex items-center justify-between gap-4 py-1 cursor-pointer">
+                <div>
+                  <p className="text-sm">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{item.desc}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={(e) => toggleNotification(item.id, e.target.checked)}
+                  className="h-4 w-4 rounded border-border accent-primary"
+                />
+              </label>
+            )
+          })}
         </div>
       </section>
 
@@ -141,24 +147,63 @@ export default function SettingsPage() {
         <h2 className="text-sm font-semibold mb-4 pb-2 border-b border-destructive/30 text-destructive">
           Danger zone
         </h2>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-md border border-destructive/20 bg-destructive/[0.03] px-4 py-3">
-            <div>
-              <p className="text-sm font-medium">Delete project</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Permanently delete &ldquo;{PROJECT.name}&rdquo; and all associated data.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-            >
-              Delete project
-            </Button>
+        <div className="flex items-center justify-between rounded-md border border-destructive/20 bg-destructive/[0.03] px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Delete project</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Permanently delete &ldquo;{tenant?.name}&rdquo; and all associated data.
+            </p>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            onClick={() => setDeleteOpen(true)}
+          >
+            Delete project
+          </Button>
         </div>
       </section>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete project</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. All emails, API keys, domains, and settings will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="delete-confirm">
+                Type <span className="font-mono font-semibold">{tenant?.name}</span> to confirm
+              </Label>
+              <Input
+                id="delete-confirm"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={tenant?.name}
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setDeleteOpen(false); setDeleteConfirm("") }} disabled={isDeleting}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteConfirm !== tenant?.name || isDeleting}
+                onClick={handleDeleteProject}
+              >
+                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete forever
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

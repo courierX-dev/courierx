@@ -7,9 +7,9 @@ module JwtService
 
   module_function
 
-  def encode(payload = {}, exp: EXPIRY)
+  def encode(payload)
     payload = payload.dup
-    payload[:exp] = exp.from_now.to_i
+    payload[:exp] = EXPIRY.from_now.to_i
     payload[:iat] = Time.current.to_i
     JWT.encode(payload, SECRET, ALGORITHM)
   end

@@ -23,7 +23,7 @@ module Api
 
           # Include basic stats for the admin
           stats = {
-            emails_sent_7d:  tenant.usage_stats.where("date >= ?", 7.days.ago.to_date).sum(:sent),
+            emails_sent_7d:  tenant.usage_stats.where("date >= ?", 7.days.ago.to_date).sum(:emails_sent),
             api_keys_count:  tenant.api_keys.count,
             providers_count: tenant.provider_connections.count,
             domains_count:   tenant.domains.count
@@ -40,6 +40,16 @@ module Api
           else
             unprocessable(tenant)
           end
+        end
+
+        def impersonate
+          tenant = Tenant.find(params[:id])
+          token = JwtService.encode(tenant_id: tenant.id)
+          
+          render json: {
+            token: token,
+            tenant: tenant.as_json
+          }
         end
 
         private

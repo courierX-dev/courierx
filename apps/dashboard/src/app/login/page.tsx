@@ -6,6 +6,7 @@ import { Zap, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { authService } from "@/services/auth.service"
 
 const stats = [
   { label: "Emails delivered",  value: "2.4B+" },
@@ -27,15 +28,20 @@ export default function LoginPage() {
   const [email, setEmail]       = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    // TODO: authService.login({ email, password })
-    setTimeout(() => {
+    setError("")
+    try {
+      await authService.login({ email, password })
+      window.location.href = "/dashboard/overview"
+    } catch {
+      setError("Invalid email or password. Please try again.")
+    } finally {
       setLoading(false)
-      window.location.href = "/dashboard"
-    }, 900)
+    }
   }
 
   return (
@@ -158,6 +164,10 @@ export default function LoginPage() {
                 required
               />
             </div>
+
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
 
             <Button type="submit" className="w-full gap-2" disabled={loading}>
               {loading ? "Signing in…" : (

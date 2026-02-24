@@ -1,52 +1,17 @@
-import { CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+"use client"
+
+import { CheckCircle2, XCircle, AlertCircle, Loader2 } from "lucide-react"
 import { TrustScore } from "@/components/ui/trust-score"
 import { cn } from "@/lib/utils"
-import { PROJECT, DOMAINS } from "@/lib/mock-data"
+import { useQuery } from "@tanstack/react-query"
+import api from "@/services/api"
 
 type CheckStatus = "pass" | "fail" | "warn"
 
-const CHECKS: { label: string; description: string; status: CheckStatus }[] = [
-  {
-    label:       "DKIM configured",
-    description: "At least one sending domain has DKIM records published.",
-    status:      "pass",
-  },
-  {
-    label:       "SPF record present",
-    description: "Your sending domain has a valid SPF TXT record.",
-    status:      "pass",
-  },
-  {
-    label:       "DMARC policy",
-    description: "DMARC is partially configured. Set policy to quarantine or reject.",
-    status:      "warn",
-  },
-  {
-    label:       "Tracking domain",
-    description: "Custom tracking domain verified for open/click tracking.",
-    status:      "fail",
-  },
-  {
-    label:       "Bounce processing",
-    description: "Bounced emails are automatically suppressed.",
-    status:      "pass",
-  },
-  {
-    label:       "Unsubscribe header",
-    description: "List-Unsubscribe headers are added to outbound messages.",
-    status:      "pass",
-  },
-  {
-    label:       "Complaint handling",
-    description: "Spam complaints trigger automatic suppression.",
-    status:      "pass",
-  },
-]
-
 const CHECK_ICON: Record<CheckStatus, React.ReactNode> = {
-  pass: <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />,
-  fail: <XCircle      className="h-4 w-4 text-destructive flex-shrink-0" />,
-  warn: <AlertCircle  className="h-4 w-4 text-warning flex-shrink-0"    />,
+  pass: <CheckCircle2 className="h-4 w-4 text-success shrink-0" />,
+  fail: <XCircle      className="h-4 w-4 text-destructive shrink-0" />,
+  warn: <AlertCircle  className="h-4 w-4 text-warning shrink-0"    />,
 }
 
 const CHECK_TEXT: Record<CheckStatus, string> = {
@@ -55,11 +20,32 @@ const CHECK_TEXT: Record<CheckStatus, string> = {
   warn: "text-warning",
 }
 
-const pass = CHECKS.filter((c) => c.status === "pass").length
-const fail = CHECKS.filter((c) => c.status === "fail").length
-const warn = CHECKS.filter((c) => c.status === "warn").length
-
 export default function CompliancePage() {
+  const { data: compliance, isLoading } = useQuery({
+    queryKey: ["dashboard", "compliance"],
+    queryFn: async () => {
+      const { data } = await api.get("/api/v1/dashboard/compliance")
+      return data
+    }
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!compliance) return <div className="text-red-400">Failed to load compliance metrics.</div>
+
+  const checks: { label: string; description: string; status: CheckStatus }[] = compliance.checks || []
+  const domains: Record<string, unknown>[] = compliance.domains || []
+  
+  const pass = checks.filter((c) => c.status === "pass").length
+  const fail = checks.filter((c) => c.status === "fail").length
+  const warn = checks.filter((c) => c.status === "warn").length
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -74,7 +60,7 @@ export default function CompliancePage() {
       <div className="grid md:grid-cols-3 gap-4">
         {/* Trust score */}
         <div className="rounded-lg border border-border bg-card p-6 flex items-center justify-center">
-          <TrustScore score={PROJECT.trust_score} />
+          <TrustScore score={compliance.trust_score || 0} />
         </div>
 
         {/* Summary */}
@@ -109,7 +95,7 @@ export default function CompliancePage() {
           <p className="text-xs font-medium">Compliance checks</p>
         </div>
         <div className="divide-y divide-border/50">
-          {CHECKS.map((check) => (
+          {checks.map((check) => (
             <div key={check.label} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/20 transition-colors">
               {CHECK_ICON[check.status]}
               <div className="flex-1 min-w-0">
@@ -138,7 +124,7 @@ export default function CompliancePage() {
             </tr>
           </thead>
           <tbody>
-            {DOMAINS.filter((d) => d.type === "sending").map((d, i) => (
+            {domains.filter((d) => d.type === "sending").map((d, i) => (
               <tr
                 key={d.id}
                 className={cn("hover:bg-muted/20 transition-colors", i === 0 && "border-b border-border/50")}
@@ -156,6 +142,13 @@ export default function CompliancePage() {
                 ))}
               </tr>
             ))}
+            {domains.filter((d) => d.type === "sending").length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No sending domains configured yet. Add a domain to monitor compliance.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

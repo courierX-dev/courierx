@@ -16,9 +16,11 @@ Rails.application.routes.draw do
   namespace :api, defaults: { format: :json } do
     namespace :v1 do
       # ── Auth ──
-      post "auth/register", to: "auth#register"
-      post "auth/login",    to: "auth#login"
-      get  "auth/me",       to: "auth#me"
+      post  "auth/register", to: "auth#register"
+      post  "auth/login",   to: "auth#login"
+      get   "auth/me",      to: "auth#me"
+      patch "auth/me",      to: "auth#update"
+      delete "auth/me",     to: "auth#destroy"
 
       # ── Waitlist (public, no auth) ──
       post "waitlist",        to: "waitlist#create"
@@ -31,7 +33,11 @@ Rails.application.routes.draw do
       get "health", to: "health#show"
 
       # ── Dashboard ──
-      get "dashboard/metrics", to: "dashboard#metrics"
+      namespace :dashboard do
+        get "metrics",    to: "metrics#index"
+        get "billing",    to: "billing#index"
+        get "compliance", to: "compliance#index"
+      end
 
       # ── Resources ──
       resources :api_keys,             only: [:index, :create, :destroy] do
@@ -50,7 +56,11 @@ Rails.application.routes.draw do
 
       # ── Super Admin Portal ──
       namespace :admin do
-        resources :tenants, only: [:index, :show, :update]
+        resources :tenants, only: [:index, :show, :update] do
+          member do
+            post :impersonate
+          end
+        end
       end
     end
   end
