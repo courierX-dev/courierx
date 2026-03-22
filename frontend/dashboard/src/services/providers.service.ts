@@ -13,6 +13,10 @@ export interface ProviderConnection {
   consecutive_failures: number
   last_health_check_at: string | null
   created_at: string
+  verification?: {
+    verified: boolean
+    error?: string
+  }
 }
 
 export interface RoutingRule {
@@ -30,6 +34,8 @@ export interface CreateProviderConnectionRequest {
   provider: string
   display_name?: string
   priority?: number
+  mode?: string
+  weight?: number
   api_key?: string
   secret?: string
   smtp_host?: string
@@ -41,6 +47,20 @@ export const providersService = {
   async listConnections(): Promise<ProviderConnection[]> {
     const { data } = await api.get<ProviderConnection[]>("/api/v1/provider_connections")
     return data
+  },
+
+  async createConnection(payload: CreateProviderConnectionRequest): Promise<ProviderConnection> {
+    const { data } = await api.post<ProviderConnection>("/api/v1/provider_connections", payload)
+    return data
+  },
+
+  async verifyConnection(id: string): Promise<ProviderConnection> {
+    const { data } = await api.post<ProviderConnection>(`/api/v1/provider_connections/${id}/verify`)
+    return data
+  },
+
+  async deleteConnection(id: string): Promise<void> {
+    await api.delete(`/api/v1/provider_connections/${id}`)
   },
 
   async listRules(): Promise<RoutingRule[]> {
@@ -62,14 +82,5 @@ export const providersService = {
 
   async deleteRule(id: string): Promise<void> {
     await api.delete(`/api/v1/routing_rules/${id}`)
-  },
-
-  async createConnection(payload: CreateProviderConnectionRequest): Promise<ProviderConnection> {
-    const { data } = await api.post<ProviderConnection>("/api/v1/provider_connections", payload)
-    return data
-  },
-
-  async deleteConnection(id: string): Promise<void> {
-    await api.delete(`/api/v1/provider_connections/${id}`)
   },
 }

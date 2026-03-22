@@ -39,6 +39,10 @@ func SetupRoutes(app *fiber.App, dbPool *pgxpool.Pool, cfg *config.Config, prom 
 		app.Get("/metrics", adaptor.HTTPHandler(promHandler))
 	}
 
+	// ── Internal API (Rails → Go) ─────────────────────────────────────────────
+	internal := app.Group("/internal", middleware.InternalAuth(cfg.InternalSecret))
+	internal.Post("/verify-provider", handler.VerifyProvider)
+
 	// ── Authenticated v1 API ──────────────────────────────────────────────────
 	v1 := app.Group("/v1", middleware.InternalAuth(cfg.InternalSecret))
 	v1.Post("/send", handler.Send)

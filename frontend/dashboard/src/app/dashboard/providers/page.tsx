@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, Server } from "lucide-react"
+import { Plus, Trash2, Server, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DotIndicator } from "@/components/ui/dot-indicator"
 import { PageShell } from "@/components/dashboard/page-shell"
@@ -9,7 +9,11 @@ import { PageHeader } from "@/components/dashboard/page-header"
 import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { useProviderConnections, useDeleteProviderConnection } from "@/hooks/use-providers"
+import {
+  useProviderConnections,
+  useDeleteProviderConnection,
+  useVerifyProviderConnection,
+} from "@/hooks/use-providers"
 import type { ProviderConnection } from "@/services/providers.service"
 import { ConnectProviderDialog } from "./connect-provider-dialog"
 
@@ -30,8 +34,10 @@ function providerLabel(provider: string) {
 export default function ProvidersPage() {
   const { data: connections, isLoading, isError, refetch } = useProviderConnections()
   const deleteMutation = useDeleteProviderConnection()
+  const verifyMutation = useVerifyProviderConnection()
   const [connectOpen, setConnectOpen] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [verifyingId, setVerifyingId] = useState<string | null>(null)
 
   async function handleDelete(conn: ProviderConnection) {
     try {
@@ -41,6 +47,24 @@ export default function ProvidersPage() {
       toast.error("Failed to disconnect provider")
     } finally {
       setConfirmDeleteId(null)
+    }
+  }
+
+  async function handleVerify(conn: ProviderConnection) {
+    setVerifyingId(conn.id)
+    try {
+      const result = await verifyMutation.mutateAsync(conn.id)
+      if (result.verification?.verified) {
+        toast.success("Credentials verified", { description: providerLabel(conn.provider) })
+      } else {
+        toast.error("Verification failed", {
+          description: result.verification?.error ?? "Check your credentials.",
+        })
+      }
+    } catch {
+      toast.error("Verification check failed")
+    } finally {
+      setVerifyingId(null)
     }
   }
 
@@ -92,7 +116,7 @@ export default function ProvidersPage() {
           </Button>
         </div>
       ) : (
-        /* Provider cards */
+        /* Provider table */
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full">
             <thead>
@@ -117,12 +141,14 @@ export default function ProvidersPage() {
                   <td className="px-4 py-3">
                     <div className="flex flex-col">
                       <span className="text-sm font-medium">{conn.display_name ?? providerLabel(conn.provider)}</span>
-                      <span className="text-[11px] text-muted-foreground">{providerLabel(conn.provider)}</span>
+                      {conn.display_name && (
+                        <span className="text-[11px] text-muted-foreground">{providerLabel(conn.provider)}</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <DotIndicator status={conn.status === "active" ? "active" : "inactive"} />
+                      <DotIndicator status={conn.status === "active" ? "active" : conn.status === "degraded" ? "degraded" : "inactive"} />
                       <span className="text-xs capitalize">{conn.status}</span>
                     </div>
                   </td>
@@ -159,15 +185,28 @@ export default function ProvidersPage() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        aria-label="Disconnect provider"
-                        onClick={() => setConfirmDeleteId(conn.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground gap-1"
+                          disabled={verifyingId === conn.id}
+                          onClick={() => handleVerify(conn)}
+                          aria-label="Verify credentials"
+                        >
+                          <RefreshCw className={cn("h-3 w-3", verifyingId === conn.id && "animate-spin")} />
+                          Verify
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          aria-label="Disconnect provider"
+                          onClick={() => setConfirmDeleteId(conn.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -177,16 +216,21 @@ export default function ProvidersPage() {
         </div>
       )}
 
-      {/* Info callout */}
-      {providers.length > 0 && (
-        <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground space-y-1">
-          <p className="font-medium text-foreground">Bring Your Own Keys</p>
-          <p>
-            Provider credentials are encrypted at rest. CourierX never stores or logs your raw API keys.
-            Configure routing rules to control failover priority across providers.
-          </p>
-        </div>
-      )}
+      {/* BYOK + subdomain info callout */}
+      <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground space-y-2">
+        <p className="font-medium text-foreground">Bring Your Own Keys</p>
+        <p>
+          Provider credentials are encrypted at rest with AES-256 and verified server-side.
+          CourierX never stores or logs your raw API keys.
+        </p>
+        <p className="font-medium text-foreground pt-1">Multi-provider DNS setup</p>
+        <p>
+          When using multiple providers, use a <span className="font-mono text-foreground">subdomain per provider</span> to
+          avoid DKIM record conflicts. For example: <span className="font-mono text-foreground">mail.example.com</span> for
+          SendGrid and <span className="font-mono text-foreground">mg.example.com</span> for Mailgun.
+          Each subdomain gets its own independent DKIM records with no conflicts.
+        </p>
+      </div>
 
       {/* Connect dialog */}
       <ConnectProviderDialog open={connectOpen} onOpenChange={setConnectOpen} />

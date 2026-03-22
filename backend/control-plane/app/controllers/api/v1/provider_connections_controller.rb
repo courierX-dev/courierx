@@ -3,7 +3,7 @@
 module Api
   module V1
     class ProviderConnectionsController < BaseController
-      before_action :set_provider_connection, only: [:show, :update, :destroy]
+      before_action :set_provider_connection, only: [:show, :update, :destroy, :verify]
 
       def index
         connections = current_tenant.provider_connections.order(priority: :asc)
@@ -17,7 +17,9 @@ module Api
       def create
         connection = current_tenant.provider_connections.build(connection_params)
         if connection.save
-          render json: connection_json(connection), status: :created
+          # Verify credentials asynchronously-ish: call Go engine to validate
+          verification = ProviderVerificationService.call(connection)
+          render json: connection_json(connection.reload).merge(verification: verification), status: :created
         else
           render json: { errors: connection.errors.full_messages }, status: :unprocessable_entity
         end
@@ -25,10 +27,21 @@ module Api
 
       def update
         if @connection.update(connection_params)
-          render json: connection_json(@connection)
+          # Re-verify if credentials changed
+          if connection_params[:api_key].present? || connection_params[:secret].present?
+            verification = ProviderVerificationService.call(@connection)
+            render json: connection_json(@connection.reload).merge(verification: verification)
+          else
+            render json: connection_json(@connection)
+          end
         else
           render json: { errors: @connection.errors.full_messages }, status: :unprocessable_entity
         end
+      end
+
+      def verify
+        result = ProviderVerificationService.call(@connection)
+        render json: connection_json(@connection.reload).merge(verification: result)
       end
 
       def destroy

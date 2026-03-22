@@ -43,7 +43,9 @@ Rails.application.routes.draw do
       resources :api_keys,             only: [:index, :create, :destroy] do
         member { patch :revoke }
       end
-      resources :provider_connections, only: [:index, :show, :create, :update, :destroy]
+      resources :provider_connections, only: [:index, :show, :create, :update, :destroy] do
+        member { post :verify }
+      end
       resources :domains,              only: [:index, :show, :create, :destroy] do
         member { post :verify }
       end

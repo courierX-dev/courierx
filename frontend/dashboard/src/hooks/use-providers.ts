@@ -19,6 +19,14 @@ export function useCreateProviderConnection() {
   })
 }
 
+export function useVerifyProviderConnection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: providersService.verifyConnection,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["providerConnections"] }),
+  })
+}
+
 export function useDeleteProviderConnection() {
   const qc = useQueryClient()
   return useMutation({
