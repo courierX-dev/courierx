@@ -1,0 +1,8 @@
+{
+  "version": "2",
+  "phaseApp": "Courier-x",
+  "appId": "38e46aad-a9be-4e19-8951-b456349f0576",
+  "defaultEnv": "Development",
+  "envId": "2dbfc921-bfc0-45d6-ab9f-a35fea680f8f",
+  "monorepoSupport": true
+}

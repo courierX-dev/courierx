@@ -1,0 +1,9 @@
+# CourierX — dev process manager
+# Usage: overmind start -f Procfile.dev
+#        foreman start -f Procfile.dev
+#
+# Secrets are injected by phase run inside each command.
+
+rails:   cd backend/control-plane && phase run -- bundle exec rails server -p 4000
+sidekiq: cd backend/control-plane && phase run -- bundle exec sidekiq
+go:      cd backend/core-go && phase run -- go run main.go

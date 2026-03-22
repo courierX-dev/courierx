@@ -1,0 +1,7 @@
+{
+  "git.scanRepositories": [
+    "marketing/CourierX",
+    "marketing/CourierX-docs"
+  ],
+  "git.autoRepositoryDetection": "subFolders"
+}

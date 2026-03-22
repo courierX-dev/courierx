@@ -29,7 +29,17 @@
       "Bash(cd /Users/user/Code/courierx/apps/dashboard && npx tsc --noEmit 2>&1)",
       "Bash(npx tsc:*)",
       "Bash(tail:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(/Users/user/Code/courierx/backend/control-plane/control-plane/app/controllers/api/v1/provider_connections_controller.rb:*)",
+      "Bash(/Users/user/Code/courierx/backend/control-plane/control-plane/app/models/user.rb:*)",
+      "Bash(/Users/user/Code/courierx/backend/control-plane/control-plane/app/models/routing_rule.rb:*)",
+      "Bash(/Users/user/Code/courierx/CLAUDE.md:*)",
+      "Bash(__NEW_LINE_640a1ef60a6f315e__ echo:*)",
+      "Bash(git mv:*)",
+      "Bash(git add:*)",
+      "Bash(sed -i '' 's|├── control-plane/control-plane/|├── control-plane/|g' /Users/user/Code/courierx/CLAUDE.md)",
+      "Bash(sed -i '' 's|└── core-go/core-go/|└── core-go/|g' /Users/user/Code/courierx/CLAUDE.md)",
+      "Bash(sed -i '' 's|└── dashboard/dashboard/|└── dashboard/|g' /Users/user/Code/courierx/CLAUDE.md)"
     ]
   }
 }
