@@ -1,8 +1,11 @@
 "use client"
 
-import { CheckCircle2, Download, ArrowUpRight, Zap, Loader2 } from "lucide-react"
+import { CheckCircle2, Download, ArrowUpRight, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/services/api"
@@ -28,27 +31,35 @@ export default function BillingPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-40 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <PageShell>
+        <PageHeader title="Billing & Usage" subtitle="Manage your subscription and view past invoices" />
+        <div className="grid lg:grid-cols-3 gap-6" aria-busy="true">
+          <div className="h-80 rounded-lg bg-muted animate-pulse" />
+          <div className="lg:col-span-2 space-y-6">
+            <div className="h-36 rounded-lg bg-muted animate-pulse" />
+            <div className="h-48 rounded-lg bg-muted animate-pulse" />
+          </div>
+        </div>
+      </PageShell>
     )
   }
 
-  if (!billing) return <div className="text-red-400">Failed to load billing metrics.</div>
+  if (!billing) {
+    return (
+      <PageShell>
+        <PageHeader title="Billing & Usage" subtitle="Manage your subscription and view past invoices" />
+        <SectionError message="Failed to load billing data" />
+      </PageShell>
+    )
+  }
 
   const { used, limit } = billing.usage
   const pct = Math.round((used / limit) * 100)
   const invoices = billing.invoices || []
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Billing & Usage</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Manage your subscription and view past invoices
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader title="Billing & Usage" subtitle="Manage your subscription and view past invoices" />
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Plan card */}
@@ -190,6 +201,6 @@ export default function BillingPage() {
           </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   )
 }

@@ -4,58 +4,72 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { authService } from "@/services/auth.service"
-import { useAuthStore } from "@/stores/auth.store"
-import type { Tenant } from "@/types/auth"
+import { toast } from "sonner"
+import { useCurrentTenant, useUpdateProfile } from "@/hooks/use-auth"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
 
 export default function ProfilePage() {
-  const storeTenant = useAuthStore((s) => s.tenant)
-  const hydrate = useAuthStore((s) => s.hydrate)
-  const hydrated = useAuthStore((s) => s.hydrated)
-  const [tenant, setTenant]         = useState<Tenant | null>(null)
-  const [name, setName]             = useState("")
-  const [saving, setSaving]         = useState(false)
-  const [saved, setSaved]           = useState(false)
-  const [error, setError]           = useState("")
+  const { data: tenant, isLoading, isError, refetch } = useCurrentTenant()
+  const updateMutation = useUpdateProfile()
+  const [name, setName]   = useState("")
+  const [saved, setSaved] = useState(false)
 
+  // Sync name input when tenant data loads
   useEffect(() => {
-    if (!hydrated) hydrate()
-  }, [hydrated, hydrate])
-
-  useEffect(() => {
-    if (storeTenant) { setTenant(storeTenant); setName(storeTenant.name) }
-    authService.getCurrentUser().then((t) => {
-      setTenant(t)
-      setName(t.name)
-    }).catch(() => {})
-  }, [storeTenant])
+    if (tenant?.name) setName(tenant.name)
+  }, [tenant?.name])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    setSaving(true)
-    setError("")
     try {
-      const updated = await authService.updateName(name)
-      setTenant(updated)
+      await updateMutation.mutateAsync(name)
       setSaved(true)
+      toast.success("Profile updated")
       setTimeout(() => setSaved(false), 2000)
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { errors?: string[] } } }
-      setError(apiErr.response?.data?.errors?.[0] ?? "Failed to save.")
-    } finally {
-      setSaving(false)
+      toast.error(apiErr.response?.data?.errors?.[0] ?? "Failed to save.")
     }
   }
 
   const initials = tenant?.name ? tenant.name.slice(0, 2).toUpperCase() : "…"
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <PageShell maxWidth="narrow" gap="lg">
+        <PageHeader title="Profile" subtitle="Your account identity" />
+        <div className="space-y-4" aria-busy="true">
+          <div className="flex items-center gap-4">
+            <div className="h-14 w-14 rounded-full bg-muted animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+              <div className="h-3 w-48 rounded bg-muted animate-pulse" />
+            </div>
+          </div>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />
+          ))}
+        </div>
+      </PageShell>
+    )
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <PageShell maxWidth="narrow" gap="lg">
+        <PageHeader title="Profile" subtitle="Your account identity" />
+        <SectionError message="Failed to load profile" onRetry={refetch} />
+      </PageShell>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-8 max-w-2xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Profile</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">Your account identity</p>
-      </div>
+    <PageShell maxWidth="narrow" gap="lg">
+      <PageHeader title="Profile" subtitle="Your account identity" />
 
       {/* Avatar + name */}
       <section className="flex items-center gap-4">
@@ -122,14 +136,14 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={saving || !tenant}>
-              {saving ? "Saving…" : saved ? "Saved ✓" : "Save changes"}
+            <Button type="submit" size="sm" disabled={updateMutation.isPending || !tenant}>
+              {updateMutation.isPending ? "Saving…" : saved ? "Saved" : "Save changes"}
             </Button>
             {saved && <span className="text-xs text-success">Changes saved.</span>}
-            {error && <span className="text-xs text-destructive">{error}</span>}
+            {updateMutation.isError && <span className="text-xs text-destructive">Failed to save.</span>}
           </div>
         </form>
       </section>
-    </div>
+    </PageShell>
   )
 }

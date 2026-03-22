@@ -1,11 +1,14 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo } from "react"
 import { Search, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
-import { emailsService, type EmailListItem } from "@/services/emails.service"
+import { useEmails } from "@/hooks/use-emails"
 
 const ALL_STATUSES = ["all", "queued", "sent", "delivered", "bounced", "complained", "failed", "suppressed"]
 
@@ -27,32 +30,35 @@ export default function LogsPage() {
   const [search, setSearch]   = useState("")
   const [status, setStatus]   = useState("all")
   const [page, setPage]       = useState(1)
-  const [emails, setEmails]   = useState<EmailListItem[]>([])
-  const [loading, setLoading] = useState(true)
 
-  const fetchEmails = useCallback(() => {
-    setLoading(true)
-    emailsService.list({
-      page,
-      per_page: PER_PAGE,
-      status: status !== "all" ? status : undefined,
-      recipient: search || undefined,
-    })
-      .then(setEmails)
-      .finally(() => setLoading(false))
-  }, [page, status, search])
+  // Debounced search: useEmails re-fetches whenever queryKey changes
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [debounceTimer, setDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
-  // Debounce search — refetch on status/page change immediately, search after 400ms
-  useEffect(() => {
-    const id = setTimeout(fetchEmails, search ? 400 : 0)
-    return () => clearTimeout(id)
-  }, [fetchEmails, search])
+  function handleSearchChange(value: string) {
+    setSearch(value)
+    if (debounceTimer) clearTimeout(debounceTimer)
+    setDebounceTimer(setTimeout(() => {
+      setDebouncedSearch(value)
+      setPage(1)
+    }, 400))
+  }
 
-  // Reset to page 1 when filters change
-  useEffect(() => { setPage(1) }, [status, search])
+  function handleStatusChange(value: string) {
+    setStatus(value)
+    setPage(1)
+  }
+
+  const { data: emails, isLoading, isError, refetch } = useEmails({
+    page,
+    per_page: PER_PAGE,
+    status: status !== "all" ? status : undefined,
+    recipient: debouncedSearch || undefined,
+  })
 
   // Client-side subject / ID search on the current page
   const filtered = useMemo(() => {
+    if (!emails) return []
     if (!search) return emails
     const q = search.toLowerCase()
     return emails.filter((e) =>
@@ -62,13 +68,19 @@ export default function LogsPage() {
     )
   }, [emails, search])
 
+  // Error state
+  if (isError) {
+    return (
+      <PageShell gap="sm">
+        <PageHeader title="Message Logs" subtitle="Real-time delivery log" />
+        <SectionError message="Failed to load logs" onRetry={refetch} />
+      </PageShell>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Message Logs</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">Real-time delivery log</p>
-      </div>
+    <PageShell gap="sm">
+      <PageHeader title="Message Logs" subtitle="Real-time delivery log" />
 
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -78,13 +90,13 @@ export default function LogsPage() {
             className="pl-8 h-8 text-sm w-64"
             placeholder="Search recipient, subject, ID…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
           />
         </div>
 
         <select
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => handleStatusChange(e.target.value)}
           className="h-8 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         >
           {ALL_STATUSES.map((s) => (
@@ -110,16 +122,20 @@ export default function LogsPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {isLoading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground animate-pulse">
-                  Loading…
+                <td colSpan={5} className="px-4 py-6" aria-busy="true">
+                  <div className="space-y-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+                    ))}
+                  </div>
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  No messages match your filters.
+                  {search || status !== "all" ? "No messages match your filters." : "No logs yet. Email delivery logs will appear here once you start sending."}
                 </td>
               </tr>
             ) : (
@@ -134,13 +150,13 @@ export default function LogsPage() {
                   <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                     {new Date(email.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground truncate max-w-[100px]">
+                  <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground truncate max-w-25">
                     {email.id.slice(0, 8)}…
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs max-w-[160px] truncate">
+                  <td className="px-4 py-2 font-mono text-xs max-w-40 truncate">
                     {email.to_email}
                   </td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground max-w-[200px] truncate hidden md:table-cell">
+                  <td className="px-4 py-2 text-xs text-muted-foreground max-w-50 truncate hidden md:table-cell">
                     {email.subject}
                   </td>
                   <td className="px-4 py-2">
@@ -164,7 +180,7 @@ export default function LogsPage() {
             size="sm"
             className="h-7 w-7 p-0"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1 || loading}
+            disabled={page === 1 || isLoading}
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
@@ -173,12 +189,12 @@ export default function LogsPage() {
             size="sm"
             className="h-7 w-7 p-0"
             onClick={() => setPage((p) => p + 1)}
-            disabled={emails.length < PER_PAGE || loading}
+            disabled={(emails?.length ?? 0) < PER_PAGE || isLoading}
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
-    </div>
+    </PageShell>
   )
 }

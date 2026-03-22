@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,17 +13,25 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { DotIndicator } from "@/components/ui/dot-indicator"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
-import { providersService, type ProviderConnection, type RoutingRule } from "@/services/providers.service"
 import { toast } from "sonner"
+import { useProviderConnections, useRoutingRules, useCreateRoutingRule, useDeleteRoutingRule } from "@/hooks/use-providers"
 
 const STRATEGIES = ["failover", "round_robin", "weighted"]
 
 export default function RoutingPage() {
-  const [connections, setConnections] = useState<ProviderConnection[]>([])
-  const [rules, setRules]             = useState<RoutingRule[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [ruleOpen, setRuleOpen]       = useState(false)
+  const { data: connections, isLoading: connLoading, isError: connError, refetch: refetchConn } = useProviderConnections()
+  const { data: rules, isLoading: rulesLoading, isError: rulesError, refetch: refetchRules } = useRoutingRules()
+  const createRuleMutation = useCreateRoutingRule()
+  const deleteRuleMutation = useDeleteRoutingRule()
+
+  const loading = connLoading || rulesLoading
+  const isError = connError || rulesError
+
+  const [ruleOpen, setRuleOpen] = useState(false)
 
   // Rule form state
   const [ruleName, setRuleName]     = useState("")
@@ -32,22 +40,10 @@ export default function RoutingPage() {
   const [matchTag, setMatchTag]     = useState("")
   const [matchFrom, setMatchFrom]   = useState("")
   const [isDefault, setIsDefault]   = useState(false)
-  const [savingRule, setSavingRule] = useState(false)
   const [ruleError, setRuleError]   = useState("")
 
   // Inline delete confirm
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [deletingRule, setDeletingRule]       = useState(false)
-
-  useEffect(() => {
-    Promise.all([
-      providersService.listConnections(),
-      providersService.listRules(),
-    ])
-      .then(([c, r]) => { setConnections(c); setRules(r) })
-      .catch(() => toast.error("Failed to load routing data"))
-      .finally(() => setLoading(false))
-  }, [])
 
   function resetRuleForm() {
     setRuleName(""); setStrategy("failover"); setMatchType("catch_all")
@@ -56,7 +52,6 @@ export default function RoutingPage() {
 
   async function handleAddRule(e: React.FormEvent) {
     e.preventDefault()
-    setSavingRule(true)
     setRuleError("")
     try {
       const payload = {
@@ -67,42 +62,43 @@ export default function RoutingPage() {
         ...(matchType === "tag"  ? { match_tag: matchTag }          : {}),
         ...(matchType === "from" ? { match_from_domain: matchFrom } : {}),
       }
-      const created = await providersService.createRule(payload)
-      setRules((prev) => [created, ...prev])
+      await createRuleMutation.mutateAsync(payload)
       setRuleOpen(false)
       resetRuleForm()
       toast.success("Routing rule created", { description: ruleName })
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { errors?: string[] } } }
       setRuleError(apiErr.response?.data?.errors?.[0] ?? "Failed to create rule.")
-    } finally {
-      setSavingRule(false)
     }
   }
 
   async function handleDeleteRule(id: string, name: string) {
-    setDeletingRule(true)
     try {
-      await providersService.deleteRule(id)
-      setRules((prev) => prev.filter((r) => r.id !== id))
+      await deleteRuleMutation.mutateAsync(id)
       toast.success("Rule deleted", { description: name })
     } catch {
       toast.error("Failed to delete rule")
     } finally {
-      setDeletingRule(false)
       setConfirmDeleteId(null)
     }
   }
 
+  // Error state
+  if (isError) {
+    return (
+      <PageShell>
+        <PageHeader title="Routing & Failover" subtitle="Provider priority, routing rules, and failover history" />
+        <SectionError message="Failed to load routing data" onRetry={() => { refetchConn(); refetchRules() }} />
+      </PageShell>
+    )
+  }
+
+  const connList = connections ?? []
+  const rulesList = rules ?? []
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Routing & Failover</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Provider priority, routing rules, and failover history
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader title="Routing & Failover" subtitle="Provider priority, routing rules, and failover history" />
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Provider priority */}
@@ -111,15 +107,19 @@ export default function RoutingPage() {
             <p className="text-xs font-medium">Provider priority</p>
           </div>
           {loading ? (
-            <p className="px-4 py-6 text-center text-sm text-muted-foreground animate-pulse">Loading…</p>
-          ) : connections.length === 0 ? (
+            <div className="px-4 py-6 space-y-2" aria-busy="true">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-12 rounded bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : connList.length === 0 ? (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-muted-foreground">No providers configured.</p>
               <p className="text-xs text-muted-foreground/60 mt-1">Add a provider connection to get started.</p>
             </div>
           ) : (
             <div className="divide-y divide-border/50">
-              {connections.map((p) => (
+              {connList.map((p) => (
                 <div key={p.id} className="flex items-center gap-3 px-4 py-3">
                   <span className="text-xs font-mono text-muted-foreground/60 w-4 text-center">
                     {p.priority}
@@ -161,8 +161,12 @@ export default function RoutingPage() {
             </Button>
           </div>
           {loading ? (
-            <p className="px-4 py-6 text-center text-sm text-muted-foreground animate-pulse">Loading…</p>
-          ) : rules.length === 0 ? (
+            <div className="px-4 py-6 space-y-2" aria-busy="true">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-10 rounded bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : rulesList.length === 0 ? (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-muted-foreground">No routing rules configured.</p>
               <p className="text-xs text-muted-foreground/60 mt-1">Rules determine which provider handles each email.</p>
@@ -179,12 +183,12 @@ export default function RoutingPage() {
                 </tr>
               </thead>
               <tbody>
-                {rules.map((r, i) => (
+                {rulesList.map((r, i) => (
                   <tr
                     key={r.id}
                     className={cn(
                       "hover:bg-muted/20 transition-colors",
-                      i < rules.length - 1 && "border-b border-border/50",
+                      i < rulesList.length - 1 && "border-b border-border/50",
                     )}
                   >
                     <td className="px-4 py-2.5 text-sm font-medium">
@@ -208,7 +212,7 @@ export default function RoutingPage() {
                             size="sm"
                             className="h-6 px-1.5 text-[11px]"
                             onClick={() => setConfirmDeleteId(null)}
-                            disabled={deletingRule}
+                            disabled={deleteRuleMutation.isPending}
                           >
                             Cancel
                           </Button>
@@ -217,7 +221,7 @@ export default function RoutingPage() {
                             size="sm"
                             className="h-6 px-1.5 text-[11px]"
                             onClick={() => handleDeleteRule(r.id, r.name)}
-                            disabled={deletingRule}
+                            disabled={deleteRuleMutation.isPending}
                           >
                             Delete
                           </Button>
@@ -342,13 +346,13 @@ export default function RoutingPage() {
               <Button type="button" variant="ghost" size="sm" onClick={() => { setRuleOpen(false); resetRuleForm() }}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={savingRule}>
-                {savingRule ? "Creating…" : "Create rule"}
+              <Button type="submit" size="sm" disabled={createRuleMutation.isPending}>
+                {createRuleMutation.isPending ? "Creating…" : "Create rule"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   )
 }

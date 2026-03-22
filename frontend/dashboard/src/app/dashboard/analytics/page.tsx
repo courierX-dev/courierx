@@ -1,24 +1,20 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { VolumeChart } from "@/components/dashboard/volume-chart"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { InlineError } from "@/components/dashboard/inline-error"
 import { DotIndicator } from "@/components/ui/dot-indicator"
 import { cn } from "@/lib/utils"
-import { dashboardService, type DashboardMetrics, type Period } from "@/services/dashboard.service"
+import { useDashboardMetrics } from "@/hooks/use-dashboard"
+import type { Period } from "@/services/dashboard.service"
 
 const RANGES: Period[] = ["7d", "30d", "90d"]
 
 export default function AnalyticsPage() {
-  const [range, setRange]     = useState<Period>("7d")
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setLoading(true)
-    dashboardService.getMetrics(range)
-      .then(setMetrics)
-      .finally(() => setLoading(false))
-  }, [range])
+  const [range, setRange] = useState<Period>("7d")
+  const { data: metrics, isLoading, isError, refetch } = useDashboardMetrics(range)
 
   const chartData = metrics?.daily.map((d) => ({
     date: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -32,13 +28,8 @@ export default function AnalyticsPage() {
     : 0
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">Analytics</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Delivery performance metrics</p>
-        </div>
+    <PageShell>
+      <PageHeader title="Analytics" subtitle="Delivery performance metrics">
         <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5 bg-muted/30">
           {RANGES.map((r) => (
             <button
@@ -55,7 +46,7 @@ export default function AnalyticsPage() {
             </button>
           ))}
         </div>
-      </div>
+      </PageHeader>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -66,10 +57,10 @@ export default function AnalyticsPage() {
           { label: "Open Rate",     value: `${metrics?.rates.open_rate ?? 0}%` },
           { label: "Delivery Rate", value: `${metrics?.rates.delivery_rate ?? 0}%` },
         ].map((s) => (
-          <div key={s.label} className={cn("rounded-lg border border-border bg-card p-3", loading && "animate-pulse")}>
+          <div key={s.label} className={cn("rounded-lg border border-border bg-card p-3", isLoading && "animate-pulse")}>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</p>
             <p className="mt-1 text-xl font-bold font-mono tabular-nums">
-              {loading ? <span className="invisible">0</span> : s.value}
+              {isLoading ? <span className="invisible">0</span> : isError ? "—" : s.value}
             </p>
           </div>
         ))}
@@ -91,10 +82,15 @@ export default function AnalyticsPage() {
             </span>
           </div>
         </div>
-        {chartData.length > 0
-          ? <VolumeChart data={chartData} />
-          : <p className="py-8 text-center text-sm text-muted-foreground">No data for this period</p>
-        }
+        {isLoading ? (
+          <div className="h-50 rounded bg-muted animate-pulse" />
+        ) : isError ? (
+          <InlineError message="Could not load chart data" onRetry={refetch} />
+        ) : chartData.length > 0 ? (
+          <VolumeChart data={chartData} />
+        ) : (
+          <p className="py-8 text-center text-sm text-muted-foreground">No data for this period</p>
+        )}
       </div>
 
       {/* Provider breakdown */}
@@ -112,9 +108,21 @@ export default function AnalyticsPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {isLoading ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground animate-pulse">Loading…</td>
+                <td colSpan={4} className="px-4 py-6" aria-busy="true">
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ) : isError ? (
+              <tr>
+                <td colSpan={4}>
+                  <InlineError message="Could not load provider data" onRetry={refetch} />
+                </td>
               </tr>
             ) : !metrics?.providers.length ? (
               <tr>
@@ -180,6 +188,6 @@ export default function AnalyticsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

@@ -1,9 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, Server, AlertCircle } from "lucide-react"
+import { Plus, Trash2, Server } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DotIndicator } from "@/components/ui/dot-indicator"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useProviderConnections, useDeleteProviderConnection } from "@/hooks/use-providers"
@@ -44,57 +47,37 @@ export default function ProvidersPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-semibold tracking-tight">Providers</h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">Connect your email provider accounts</p>
-          </div>
-        </div>
+      <PageShell>
+        <PageHeader title="Providers" subtitle="Connect your email provider accounts" />
         <div className="space-y-2" aria-busy="true">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
           ))}
         </div>
-      </div>
+      </PageShell>
     )
   }
 
   // Error state
   if (isError) {
     return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">Providers</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Connect your email provider accounts</p>
-        </div>
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <AlertCircle className="mb-4 h-10 w-10 text-destructive" />
-          <h3 className="text-sm font-medium">Failed to load providers</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Could not reach server. Please try again.</p>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
-            Retry
-          </Button>
-        </div>
-      </div>
+      <PageShell>
+        <PageHeader title="Providers" subtitle="Connect your email provider accounts" />
+        <SectionError message="Failed to load providers" onRetry={refetch} />
+      </PageShell>
     )
   }
 
   const providers = connections ?? []
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">Providers</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Connect your email provider accounts</p>
-        </div>
+    <PageShell>
+      <PageHeader title="Providers" subtitle="Connect your email provider accounts">
         <Button size="sm" className="h-8 gap-1.5" onClick={() => setConnectOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
           Connect provider
         </Button>
-      </div>
+      </PageHeader>
 
       {/* Empty state */}
       {providers.length === 0 ? (
@@ -207,6 +190,6 @@ export default function ProvidersPage() {
 
       {/* Connect dialog */}
       <ConnectProviderDialog open={connectOpen} onOpenChange={setConnectOpen} />
-    </div>
+    </PageShell>
   )
 }

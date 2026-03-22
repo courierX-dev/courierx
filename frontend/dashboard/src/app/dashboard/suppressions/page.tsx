@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { Search, Upload, Download, Trash2, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -12,9 +12,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
-import { suppressionsService, type Suppression } from "@/services/suppressions.service"
 import { toast } from "sonner"
+import { useSuppressions, useCreateSuppression, useDeleteSuppression } from "@/hooks/use-suppressions"
 
 const REASON_COLOR: Record<string, string> = {
   hard_bounce: "text-destructive",
@@ -26,24 +29,18 @@ const REASON_COLOR: Record<string, string> = {
 const REASONS = ["hard_bounce", "soft_bounce", "complaint", "unsubscribe", "manual"]
 
 export default function SuppressionsPage() {
-  const [suppressions, setSuppresssions] = useState<Suppression[]>([])
-  const [loading, setLoading]            = useState(true)
-  const [search, setSearch]              = useState("")
-  const [open, setOpen]                  = useState(false)
-  const [email, setEmail]                = useState("")
-  const [reason, setReason]              = useState("manual")
-  const [adding, setAdding]              = useState(false)
-  const [confirmId, setConfirmId]        = useState<string | null>(null)
-  const [deleting, setDeleting]          = useState(false)
+  const { data: suppressions, isLoading, isError, refetch } = useSuppressions()
+  const createMutation = useCreateSuppression()
+  const deleteMutation = useDeleteSuppression()
 
-  useEffect(() => {
-    suppressionsService.list()
-      .then(setSuppresssions)
-      .catch(() => toast.error("Failed to load suppressions"))
-      .finally(() => setLoading(false))
-  }, [])
+  const [search, setSearch]      = useState("")
+  const [open, setOpen]          = useState(false)
+  const [email, setEmail]        = useState("")
+  const [reason, setReason]      = useState("manual")
+  const [confirmId, setConfirmId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
+    if (!suppressions) return []
     if (!search) return suppressions
     const q = search.toLowerCase()
     return suppressions.filter((s) =>
@@ -54,45 +51,41 @@ export default function SuppressionsPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    setAdding(true)
     try {
-      const added = await suppressionsService.create({ email, reason })
-      setSuppresssions((prev) => [added, ...prev])
+      await createMutation.mutateAsync({ email, reason })
       setOpen(false)
       setEmail("")
       setReason("manual")
       toast.success("Suppression added", { description: email })
     } catch {
       toast.error("Failed to add suppression")
-    } finally {
-      setAdding(false)
     }
   }
 
   async function handleDelete(id: string, emailAddr: string) {
-    setDeleting(true)
     try {
-      await suppressionsService.delete(id)
-      setSuppresssions((prev) => prev.filter((s) => s.id !== id))
+      await deleteMutation.mutateAsync(id)
       toast.success("Suppression removed", { description: emailAddr })
     } catch {
       toast.error("Failed to remove suppression")
     } finally {
-      setDeleting(false)
       setConfirmId(null)
     }
   }
 
+  // Error state
+  if (isError) {
+    return (
+      <PageShell>
+        <PageHeader title="Suppressions" subtitle="Emails that will not receive future messages" />
+        <SectionError message="Failed to load suppressions" onRetry={refetch} />
+      </PageShell>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">Suppressions</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Emails that will not receive future messages
-          </p>
-        </div>
+    <PageShell>
+      <PageHeader title="Suppressions" subtitle="Emails that will not receive future messages">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 gap-1.5" disabled title="Coming soon">
             <Upload className="h-3.5 w-3.5" />
@@ -107,7 +100,7 @@ export default function SuppressionsPage() {
             Add
           </Button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Search */}
       <div className="flex items-center gap-2">
@@ -137,10 +130,14 @@ export default function SuppressionsPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {isLoading ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground animate-pulse">
-                  Loading…
+                <td colSpan={4} className="px-4 py-6" aria-busy="true">
+                  <div className="space-y-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+                    ))}
+                  </div>
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
@@ -183,7 +180,7 @@ export default function SuppressionsPage() {
                           size="sm"
                           className="h-6 px-2 text-xs"
                           onClick={() => setConfirmId(null)}
-                          disabled={deleting}
+                          disabled={deleteMutation.isPending}
                         >
                           Cancel
                         </Button>
@@ -192,7 +189,7 @@ export default function SuppressionsPage() {
                           size="sm"
                           className="h-6 px-2 text-xs"
                           onClick={() => handleDelete(s.id, s.email)}
-                          disabled={deleting}
+                          disabled={deleteMutation.isPending}
                         >
                           Remove
                         </Button>
@@ -253,13 +250,13 @@ export default function SuppressionsPage() {
               <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={adding}>
-                {adding ? "Adding…" : "Add suppression"}
+              <Button type="submit" size="sm" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Adding…" : "Add suppression"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   )
 }

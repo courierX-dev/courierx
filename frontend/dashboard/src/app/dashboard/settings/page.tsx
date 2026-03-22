@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,10 +13,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { authService } from "@/services/auth.service"
-import type { Tenant } from "@/types/auth"
 import api from "@/services/api"
-import { useToast } from "@/components/ui/use-toast"
-import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
+import { useCurrentTenant } from "@/hooks/use-auth"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
+import type { Tenant } from "@/types/auth"
 
 const NOTIFICATIONS = [
   { id: "failover_events",   label: "Failover events",   desc: "Notify when a provider failover occurs" },
@@ -25,30 +29,23 @@ const NOTIFICATIONS = [
 ]
 
 export default function SettingsPage() {
-  const [tenant, setTenant]               = useState<Tenant | null>(null)
+  const { data: tenant, isLoading, isError, refetch } = useCurrentTenant()
   const [deleteOpen, setDeleteOpen]       = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState("")
   const [isDeleting, setIsDeleting]       = useState(false)
   const [notifications, setNotifications] = useState<Record<string, boolean>>({})
-  const { toast } = useToast()
+  const [notifInit, setNotifInit]         = useState(false)
 
-  useEffect(() => {
-    fetchTenantDetails()
-  }, [])
-
-  async function fetchTenantDetails() {
-    try {
-      const data = await authService.getCurrentUser()
-      setTenant(data)
-      const settings = (data.settings || {}) as Record<string, unknown>
-      const notifs = (settings.notifications || {}) as Record<string, boolean>
-      setNotifications(notifs)
-    } catch {
-      toast({ title: "Error", description: "Could not load settings" })
-    }
+  // Initialize notification state from tenant data once loaded
+  if (tenant && !notifInit) {
+    const settings = (tenant.settings || {}) as Record<string, unknown>
+    const notifs = (settings.notifications || {}) as Record<string, boolean>
+    setNotifications(notifs)
+    setNotifInit(true)
   }
 
   async function toggleNotification(id: string, checked: boolean) {
+    const prev = { ...notifications }
     const updated = { ...notifications, [id]: checked }
     setNotifications(updated)
 
@@ -56,10 +53,10 @@ export default function SettingsPage() {
       await api.patch<{ tenant: Tenant }>("/api/v1/auth/me", {
         settings: { notifications: updated }
       })
-      toast({ title: "Settings saved", description: "Notification preferences updated." })
+      toast.success("Notification preferences updated")
     } catch {
-      toast({ title: "Error", description: "Failed to update preferences.", variant: "destructive" })
-      setNotifications(notifications) // revert
+      toast.error("Failed to update preferences")
+      setNotifications(prev)
     }
   }
 
@@ -68,29 +65,40 @@ export default function SettingsPage() {
     setIsDeleting(true)
     try {
       await api.delete("/api/v1/auth/me")
-      // Force clear local storage and redirect
       authService.logout()
     } catch {
-      toast({ title: "Error", description: "Could not delete project.", variant: "destructive" })
+      toast.error("Could not delete project")
       setIsDeleting(false)
     }
   }
 
-  if (!tenant) {
+  // Loading state
+  if (isLoading) {
     return (
-      <div className="flex h-40 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <PageShell maxWidth="narrow" gap="lg">
+        <PageHeader title="Settings" subtitle="Project configuration and preferences" />
+        <div className="space-y-4" aria-busy="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />
+          ))}
+        </div>
+      </PageShell>
+    )
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <PageShell maxWidth="narrow" gap="lg">
+        <PageHeader title="Settings" subtitle="Project configuration and preferences" />
+        <SectionError message="Failed to load settings" onRetry={refetch} />
+      </PageShell>
     )
   }
 
   return (
-    <div className="flex flex-col gap-8 max-w-2xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Settings</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">Project configuration and preferences</p>
-      </div>
+    <PageShell maxWidth="narrow" gap="lg">
+      <PageHeader title="Settings" subtitle="Project configuration and preferences" />
 
       {/* Project info (read-only) */}
       <section>
@@ -122,7 +130,6 @@ export default function SettingsPage() {
         <h2 className="text-sm font-semibold mb-4 pb-2 border-b border-border">Notifications</h2>
         <div className="space-y-3">
           {NOTIFICATIONS.map((item) => {
-            // Default to true if not explicitly set
             const isChecked = notifications[item.id] !== false
             return (
               <label key={item.id} className="flex items-center justify-between gap-4 py-1 cursor-pointer">
@@ -147,7 +154,7 @@ export default function SettingsPage() {
         <h2 className="text-sm font-semibold mb-4 pb-2 border-b border-destructive/30 text-destructive">
           Danger zone
         </h2>
-        <div className="flex items-center justify-between rounded-md border border-destructive/20 bg-destructive/[0.03] px-4 py-3">
+        <div className="flex items-center justify-between rounded-md border border-destructive/20 bg-destructive/4 px-4 py-3">
           <div>
             <p className="text-sm font-medium">Delete project</p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -186,7 +193,7 @@ export default function SettingsPage() {
                 placeholder={tenant?.name}
               />
             </div>
-            
+
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => { setDeleteOpen(false); setDeleteConfirm("") }} disabled={isDeleting}>
                 Cancel
@@ -204,6 +211,6 @@ export default function SettingsPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   )
 }

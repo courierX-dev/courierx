@@ -5,6 +5,7 @@ export function useCurrentTenant() {
   return useQuery({
     queryKey: ["auth", "me"],
     queryFn: () => authService.getCurrentUser(),
+    staleTime: 5 * 60 * 1000, // 5 min — avoid refetch on every navigation
   })
 }
 

@@ -1,12 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { ArrowUpRight, ArrowDownRight } from "lucide-react"
+import { ArrowUpRight, ArrowDownRight, AlertCircle } from "lucide-react"
 import { VolumeChart } from "@/components/dashboard/volume-chart"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { InlineError } from "@/components/dashboard/inline-error"
 import { DotIndicator } from "@/components/ui/dot-indicator"
 import { cn } from "@/lib/utils"
-import { dashboardService, type DashboardMetrics } from "@/services/dashboard.service"
-import { emailsService, type EmailListItem } from "@/services/emails.service"
+import { useDashboardMetrics } from "@/hooks/use-dashboard"
+import { useEmails } from "@/hooks/use-emails"
 
 const STATUS_COLOR: Record<string, string> = {
   delivered:  "text-success",
@@ -62,19 +64,18 @@ function MetricSkeleton() {
   )
 }
 
-export default function OverviewPage() {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [emails, setEmails]   = useState<EmailListItem[]>([])
-  const [loading, setLoading] = useState(true)
+function MetricErrorCard() {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 flex items-center gap-2">
+      <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+      <p className="text-xs text-muted-foreground">Failed to load</p>
+    </div>
+  )
+}
 
-  useEffect(() => {
-    Promise.all([
-      dashboardService.getMetrics("7d"),
-      emailsService.list({ per_page: 5 }),
-    ])
-      .then(([m, e]) => { setMetrics(m); setEmails(e) })
-      .finally(() => setLoading(false))
-  }, [])
+export default function OverviewPage() {
+  const { data: metrics, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useDashboardMetrics("7d")
+  const { data: emails, isLoading: emailsLoading, isError: emailsError, refetch: refetchEmails } = useEmails({ per_page: 5 })
 
   const bounceRate = metrics && metrics.totals.sent > 0
     ? ((metrics.totals.bounced / metrics.totals.sent) * 100).toFixed(2)
@@ -88,17 +89,15 @@ export default function OverviewPage() {
   })) ?? []
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Overview</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">Last 7 days · Production</p>
-      </div>
+    <PageShell>
+      <PageHeader title="Overview" subtitle="Last 7 days · Production" />
 
       {/* Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {loading ? (
+        {metricsLoading ? (
           Array.from({ length: 4 }).map((_, i) => <MetricSkeleton key={i} />)
+        ) : metricsError ? (
+          Array.from({ length: 4 }).map((_, i) => <MetricErrorCard key={i} />)
         ) : (
           <>
             <MetricCard label="Sent (7d)"      value={(metrics?.totals.sent ?? 0).toLocaleString()} />
@@ -113,15 +112,20 @@ export default function OverviewPage() {
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 rounded-lg border border-border bg-card px-4 pt-4 pb-2">
           <p className="text-xs font-medium text-muted-foreground mb-4">Volume — 7 days</p>
-          {chartData.length > 0
-            ? <VolumeChart data={chartData} />
-            : <p className="py-8 text-center text-sm text-muted-foreground">No data yet</p>
-          }
+          {metricsLoading ? (
+            <div className="h-50 rounded bg-muted animate-pulse" />
+          ) : metricsError ? (
+            <InlineError message="Could not load chart data" onRetry={refetchMetrics} />
+          ) : chartData.length > 0 ? (
+            <VolumeChart data={chartData} />
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">No data yet</p>
+          )}
         </div>
 
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs font-medium text-muted-foreground mb-4">Provider health</p>
-          {loading ? (
+          {metricsLoading ? (
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="flex items-center justify-between animate-pulse">
@@ -133,6 +137,8 @@ export default function OverviewPage() {
                 </div>
               ))}
             </div>
+          ) : metricsError ? (
+            <InlineError message="Could not load providers" onRetry={refetchMetrics} />
           ) : metrics?.providers.length === 0 ? (
             <p className="text-xs text-muted-foreground">No providers configured.</p>
           ) : (
@@ -159,57 +165,65 @@ export default function OverviewPage() {
         <div className="px-4 py-2.5 border-b border-border bg-muted/20">
           <p className="text-xs font-medium">Recent messages</p>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Time</th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recipient</th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Subject</th>
-              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground animate-pulse">
-                  Loading…
-                </td>
+        {emailsError ? (
+          <InlineError message="Could not load recent messages" onRetry={refetchEmails} />
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Time</th>
+                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recipient</th>
+                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Subject</th>
+                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
               </tr>
-            ) : emails.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  No messages yet.
-                </td>
-              </tr>
-            ) : (
-              emails.map((email, i) => (
-                <tr
-                  key={email.id}
-                  className={cn(
-                    "hover:bg-muted/20 transition-colors",
-                    i < emails.length - 1 && "border-b border-border/50",
-                  )}
-                >
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(email.created_at).toLocaleTimeString()}
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-xs max-w-[180px] truncate">
-                    {email.to_email}
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[200px] truncate hidden md:table-cell">
-                    {email.subject}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span className={cn("text-xs font-medium capitalize", STATUS_COLOR[email.status] ?? "text-muted-foreground")}>
-                      {email.status}
-                    </span>
+            </thead>
+            <tbody>
+              {emailsLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6" aria-busy="true">
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+                      ))}
+                    </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : !emails?.length ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No messages yet.
+                  </td>
+                </tr>
+              ) : (
+                emails.map((email, i) => (
+                  <tr
+                    key={email.id}
+                    className={cn(
+                      "hover:bg-muted/20 transition-colors",
+                      i < emails.length - 1 && "border-b border-border/50",
+                    )}
+                  >
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(email.created_at).toLocaleTimeString()}
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-xs max-w-45 truncate">
+                      {email.to_email}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-50 truncate hidden md:table-cell">
+                      {email.subject}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn("text-xs font-medium capitalize", STATUS_COLOR[email.status] ?? "text-muted-foreground")}>
+                        {email.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
-    </div>
+    </PageShell>
   )
 }

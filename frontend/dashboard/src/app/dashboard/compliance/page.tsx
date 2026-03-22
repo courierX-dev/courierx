@@ -1,7 +1,10 @@
 "use client"
 
-import { CheckCircle2, XCircle, AlertCircle, Loader2 } from "lucide-react"
+import { CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 import { TrustScore } from "@/components/ui/trust-score"
+import { PageShell } from "@/components/dashboard/page-shell"
+import { PageHeader } from "@/components/dashboard/page-header"
+import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/services/api"
@@ -31,13 +34,28 @@ export default function CompliancePage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-40 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <PageShell>
+        <PageHeader title="Compliance" subtitle="Email authentication and deliverability health" />
+        <div className="space-y-6" aria-busy="true">
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="h-32 rounded-lg bg-muted animate-pulse" />
+            <div className="md:col-span-2 h-32 rounded-lg bg-muted animate-pulse" />
+          </div>
+          <div className="h-48 rounded-lg bg-muted animate-pulse" />
+          <div className="h-36 rounded-lg bg-muted animate-pulse" />
+        </div>
+      </PageShell>
     )
   }
 
-  if (!compliance) return <div className="text-red-400">Failed to load compliance metrics.</div>
+  if (!compliance) {
+    return (
+      <PageShell>
+        <PageHeader title="Compliance" subtitle="Email authentication and deliverability health" />
+        <SectionError message="Failed to load compliance data" />
+      </PageShell>
+    )
+  }
 
   const checks: { label: string; description: string; status: CheckStatus }[] = compliance.checks || []
   const domains: { id: string; domain: string; type: string; dkim: boolean; spf: boolean; dmarc: boolean }[] = compliance.domains || []
@@ -47,14 +65,8 @@ export default function CompliancePage() {
   const warn = checks.filter((c) => c.status === "warn").length
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Compliance</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Email authentication and deliverability health
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader title="Compliance" subtitle="Email authentication and deliverability health" />
 
       {/* Score + summary */}
       <div className="grid md:grid-cols-3 gap-4">
@@ -152,6 +164,6 @@ export default function CompliancePage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </PageShell>
   )
 }
