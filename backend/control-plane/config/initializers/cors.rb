@@ -7,9 +7,17 @@
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins ENV.fetch("FRONTEND_URL", "http://localhost:3000"),
-           "http://localhost:3033",
-           "http://localhost:3001"
+    frontend_origins = ENV.fetch("FRONTEND_URL", "http://localhost:3000")
+                          .split(",")
+                          .map(&:strip)
+                          .reject(&:empty?)
+
+    vercel_preview = %r{\Ahttps://[a-z0-9-]+-courierx\.vercel\.app\z}
+
+    origins(*frontend_origins,
+            "http://localhost:3033",
+            "http://localhost:3001",
+            vercel_preview)
 
     resource "*",
       headers: :any,
