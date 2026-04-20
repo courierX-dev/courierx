@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/courierx/core-go/internal/types"
+	"github.com/google/uuid"
 )
 
 // SendGridProvider sends email via the SendGrid v3 Mail Send API.
@@ -121,7 +122,7 @@ func (p *SendGridProvider) Send(ctx context.Context, req *types.SendRequest) (*t
 
 	msgID := resp.Header.Get("X-Message-Id")
 	if msgID == "" {
-		msgID = "sg-" + req.To
+		msgID = "sg-unknown-" + uuid.New().String()
 	}
 
 	return &types.SendResponse{

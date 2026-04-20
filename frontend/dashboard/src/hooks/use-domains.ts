@@ -5,6 +5,7 @@ export function useDomains() {
   return useQuery({
     queryKey: ["domains"],
     queryFn: () => domainsService.list(),
+    staleTime: 10 * 60 * 1000,
   })
 }
 

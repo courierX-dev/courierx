@@ -9,11 +9,11 @@ export const metadata: Metadata = {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
-      <TopBar />
-      <div className="flex flex-1 overflow-hidden">
-        <ProjectSidebar />
-        <main className="flex-1 overflow-y-auto p-6" style={{ scrollbarGutter: "stable" }}>
+    <div className="flex h-screen overflow-hidden">
+      <ProjectSidebar />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <TopBar />
+        <main className="flex-1 overflow-y-auto bg-background p-6" style={{ scrollbarGutter: "stable" }}>
           {children}
         </main>
       </div>

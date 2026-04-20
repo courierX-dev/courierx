@@ -6,7 +6,7 @@ module Api
       before_action :set_rule, only: [:show, :update, :destroy]
 
       def index
-        rules = current_tenant.routing_rules.includes(:provider_connections).order(created_at: :desc)
+        rules = current_tenant.routing_rules.order(created_at: :desc)
         render json: rules.map { |r| rule_json(r) }
       end
 

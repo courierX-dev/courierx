@@ -49,7 +49,7 @@ export default function LogsPage() {
     setPage(1)
   }
 
-  const { data: emails, isLoading, isError, refetch } = useEmails({
+  const { data: emails, isLoading, isFetching, isError, refetch } = useEmails({
     page,
     per_page: PER_PAGE,
     status: status !== "all" ? status : undefined,
@@ -110,7 +110,7 @@ export default function LogsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden">
+      <div className={cn("rounded-lg border border-border overflow-hidden transition-opacity", isFetching && !isLoading && "opacity-60")}>
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/20">
@@ -180,7 +180,7 @@ export default function LogsPage() {
             size="sm"
             className="h-7 w-7 p-0"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1 || isLoading}
+            disabled={page === 1 || isFetching}
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
@@ -189,7 +189,7 @@ export default function LogsPage() {
             size="sm"
             className="h-7 w-7 p-0"
             onClick={() => setPage((p) => p + 1)}
-            disabled={(emails?.length ?? 0) < PER_PAGE || isLoading}
+            disabled={(emails?.length ?? 0) < PER_PAGE || isFetching}
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </Button>

@@ -6,7 +6,7 @@ module Api
       # No auth required for register/login
       skip_before_action :verify_authenticity_token, raise: false
 
-      before_action :authenticate_for_me, only: [:me, :update]
+      before_action :authenticate_for_me, only: [:me, :update, :destroy]
 
       # POST /api/v1/auth/register
       def register
@@ -58,7 +58,8 @@ module Api
       private
 
       def tenant_params
-        params.permit(:name, :email, :mode, :password, :password_confirmation)
+        p = params.key?(:auth) ? params.require(:auth) : params
+        p.permit(:name, :email, :mode, :password, :password_confirmation)
       end
 
       def update_params

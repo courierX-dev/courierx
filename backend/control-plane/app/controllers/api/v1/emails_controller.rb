@@ -13,8 +13,9 @@ module Api
         emails = emails.where("created_at >= ?", params[:from]) if params[:from].present?
         emails = emails.where("created_at <= ?", params[:to])   if params[:to].present?
 
-        emails = emails.page(params[:page] || 1).per(params[:per_page] || 25) if emails.respond_to?(:page)
-        emails = emails.limit(params[:per_page]&.to_i || 25) unless emails.respond_to?(:page)
+        per = params[:per_page].present? ? params[:per_page].to_i.clamp(1, 100) : 25
+        emails = emails.page(params[:page] || 1).per(per) if emails.respond_to?(:page)
+        emails = emails.limit(per) unless emails.respond_to?(:page)
 
         render json: emails.map { |e| email_json(e) }
       end
@@ -55,7 +56,8 @@ module Api
 
       def email_params
         params.permit(:from_email, :from_name, :to_email, :to_name, :reply_to,
-                       :subject, :html_body, :text_body, tags: [], metadata: {})
+                       :subject, :html_body, :text_body, :template_id,
+                       tags: [], metadata: {}, variables: {})
       end
 
       def email_json(email)

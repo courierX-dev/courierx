@@ -3,7 +3,7 @@
 module Api
   module V1
     class DomainsController < BaseController
-      before_action :set_domain, only: [:show, :destroy, :verify]
+      before_action :set_domain, only: [:show, :update, :destroy, :verify]
 
       def index
         domains = current_tenant.domains.order(created_at: :desc)
@@ -23,9 +23,18 @@ module Api
         end
       end
 
+      def update
+        if @domain.update(domain_update_params)
+          render json: domain_json(@domain)
+        else
+          render json: { errors: @domain.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
       def verify
-        @domain.verify!
-        render json: domain_json(@domain)
+        @domain.update!(status: "pending_verification")
+        DomainVerificationJob.perform_async(@domain.id)
+        render json: { message: "Verification started" }, status: :accepted
       end
 
       def destroy
@@ -41,6 +50,10 @@ module Api
 
       def domain_params
         params.permit(:domain)
+      end
+
+      def domain_update_params
+        params.permit(:dkim_selector)
       end
 
       def domain_json(d)

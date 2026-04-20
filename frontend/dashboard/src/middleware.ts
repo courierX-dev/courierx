@@ -5,8 +5,11 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get("auth_token")?.value
   const { pathname } = request.nextUrl
 
+  // Allow preview without auth in development
+  const isDev = process.env.NODE_ENV === "development"
+
   // Unauthenticated users cannot access protected routes
-  if (!token) {
+  if (!token && !isDev) {
     return NextResponse.redirect(new URL("/login", request.url))
   }
 

@@ -27,33 +27,52 @@ class UsageRollupJob
 
     emails = tenant.emails.where(created_at: day_start..day_end)
 
+    # Two queries replace ~7 per-status COUNTs for the combined totals.
+    status_counts = emails.group(:status).count
+    event_counts  = emails
+      .joins(:email_events)
+      .where(email_events: { event_type: %w[opened clicked] })
+      .group("email_events.event_type")
+      .distinct
+      .count("emails.id")
+
     totals = {
-      emails_sent:       emails.count,
-      emails_delivered:  emails.where(status: "delivered").count,
-      emails_bounced:    emails.where(status: "bounced").count,
-      emails_complained: emails.where(status: "complained").count,
-      emails_failed:     emails.where(status: "failed").count,
-      emails_opened:     emails.joins(:email_events).where(email_events: { event_type: "opened" }).distinct.count,
-      emails_clicked:    emails.joins(:email_events).where(email_events: { event_type: "clicked" }).distinct.count
+      emails_sent:       status_counts.values.sum,
+      emails_delivered:  status_counts["delivered"].to_i,
+      emails_bounced:    status_counts["bounced"].to_i,
+      emails_complained: status_counts["complained"].to_i,
+      emails_failed:     status_counts["failed"].to_i,
+      emails_opened:     event_counts["opened"].to_i,
+      emails_clicked:    event_counts["clicked"].to_i
     }
 
-    # Upsert combined stats (provider = nil)
     UsageStat.find_or_initialize_by(tenant: tenant, date: date, provider: nil)
              .update!(totals)
 
-    # Per-provider breakdown
+    # Two queries replace N×7 per-provider COUNTs.
+    provider_status = emails
+      .joins(:provider_connection)
+      .group("provider_connections.provider", "emails.status")
+      .count
+
+    provider_events = emails
+      .joins(:provider_connection, :email_events)
+      .where(email_events: { event_type: %w[opened clicked] })
+      .group("provider_connections.provider", "email_events.event_type")
+      .distinct
+      .count("emails.id")
+
     tenant.provider_connections.pluck(:provider).uniq.each do |provider|
-      provider_emails = emails.joins(:provider_connection)
-                              .where(provider_connections: { provider: provider })
+      sent = provider_status.select { |k, _| k[0] == provider }.values.sum
 
       provider_totals = {
-        emails_sent:       provider_emails.count,
-        emails_delivered:  provider_emails.where(status: "delivered").count,
-        emails_bounced:    provider_emails.where(status: "bounced").count,
-        emails_complained: provider_emails.where(status: "complained").count,
-        emails_failed:     provider_emails.where(status: "failed").count,
-        emails_opened:     provider_emails.joins(:email_events).where(email_events: { event_type: "opened" }).distinct.count,
-        emails_clicked:    provider_emails.joins(:email_events).where(email_events: { event_type: "clicked" }).distinct.count
+        emails_sent:       sent,
+        emails_delivered:  provider_status.fetch([provider, "delivered"], 0),
+        emails_bounced:    provider_status.fetch([provider, "bounced"],    0),
+        emails_complained: provider_status.fetch([provider, "complained"], 0),
+        emails_failed:     provider_status.fetch([provider, "failed"],     0),
+        emails_opened:     provider_events.fetch([provider, "opened"],     0),
+        emails_clicked:    provider_events.fetch([provider, "clicked"],    0)
       }
 
       UsageStat.find_or_initialize_by(tenant: tenant, date: date, provider: provider)

@@ -15,6 +15,9 @@ gem "jwt", "~> 2.7"
 # CORS
 gem "rack-cors"
 
+# Redis client (required by Sidekiq, Rack::Attack cache store, ActionCable)
+gem "redis", ">= 4.0.1"
+
 # Background Jobs
 gem "sidekiq", "~> 7.2"
 

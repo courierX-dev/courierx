@@ -14,6 +14,10 @@ class DomainVerificationJob
     domain = Domain.find(domain_id)
     return if domain.status == "verified"
 
+    # Share a single resolver across all DNS checks to avoid opening three
+    # separate UDP socket pools for one job run.
+    resolver = Resolv::DNS.new
+
     # 1. If Cloudflare is configured, push DNS records first
     if CloudflareDnsService.configured? && domain.created_at > 5.minutes.ago
       push_cloudflare_records(domain)
@@ -23,13 +27,13 @@ class DomainVerificationJob
     token_found = if CloudflareDnsService.configured?
                     CloudflareDnsService.verify_domain(domain)
                   else
-                    check_txt_via_resolv(domain.domain, domain.verification_token)
+                    check_txt_via_resolv(domain.domain, domain.verification_token, resolver)
                   end
 
     if token_found
       domain.update!(status: "verified", verified_at: Time.current)
-      check_spf(domain)
-      check_dkim(domain)
+      check_spf(domain, resolver)
+      check_dkim(domain, resolver)
 
       Sentry.capture_message("Domain verified: #{domain.domain}",
                              level: :info) if defined?(Sentry)
@@ -41,6 +45,8 @@ class DomainVerificationJob
       end
       # If younger than 48h, leave as pending — DNS propagation
     end
+  ensure
+    resolver&.close
   end
 
   private
@@ -54,39 +60,30 @@ class DomainVerificationJob
     Sentry.capture_exception(e) if defined?(Sentry)
   end
 
-  def check_txt_via_resolv(domain_name, token)
-    resolver = Resolv::DNS.new
-    records  = resolver.getresources(domain_name, Resolv::DNS::Resource::IN::TXT)
+  def check_txt_via_resolv(domain_name, token, resolver)
+    records = resolver.getresources(domain_name, Resolv::DNS::Resource::IN::TXT)
     records.any? { |r| r.strings.any? { |s| s.include?(token) } }
   rescue Resolv::ResolvError, Resolv::ResolvTimeout => e
     Rails.logger.warn("[DomainVerification] DNS lookup failed: #{e.message}")
     false
-  ensure
-    resolver&.close
   end
 
-  def check_spf(domain)
-    resolver = Resolv::DNS.new
-    records  = resolver.getresources(domain.domain, Resolv::DNS::Resource::IN::TXT)
+  def check_spf(domain, resolver)
+    records = resolver.getresources(domain.domain, Resolv::DNS::Resource::IN::TXT)
     spf = records.flat_map(&:strings).find { |s| s.start_with?("v=spf1") }
     domain.update!(spf_record: spf) if spf
   rescue StandardError => e
     Rails.logger.warn("[DomainVerification] SPF check failed: #{e.message}")
-  ensure
-    resolver&.close
   end
 
-  def check_dkim(domain)
+  def check_dkim(domain, resolver)
     return unless domain.dkim_selector.present?
 
     dkim_domain = "#{domain.dkim_selector}._domainkey.#{domain.domain}"
-    resolver = Resolv::DNS.new
-    records  = resolver.getresources(dkim_domain, Resolv::DNS::Resource::IN::TXT)
+    records = resolver.getresources(dkim_domain, Resolv::DNS::Resource::IN::TXT)
     dkim = records.flat_map(&:strings).find { |s| s.include?("v=DKIM1") }
     domain.update!(dkim_public_key: dkim) if dkim
   rescue StandardError => e
     Rails.logger.warn("[DomainVerification] DKIM check failed: #{e.message}")
-  ensure
-    resolver&.close
   end
 end

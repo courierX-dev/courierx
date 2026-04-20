@@ -32,6 +32,16 @@ module Api
           render json: tenant.as_json.merge(stats: stats)
         end
 
+        def create
+          tenant = Tenant.new(tenant_create_params)
+          if tenant.save
+            token = JwtService.encode(tenant_id: tenant.id)
+            render json: { tenant: tenant.as_json, token: token }, status: :created
+          else
+            render json: { errors: tenant.errors.full_messages }, status: :unprocessable_entity
+          end
+        end
+
         def update
           tenant = Tenant.find(params[:id])
 
@@ -42,14 +52,23 @@ module Api
           end
         end
 
+        def destroy
+          tenant = Tenant.find(params[:id])
+          tenant.destroy!
+          head :no_content
+        end
+
         def impersonate
           tenant = Tenant.find(params[:id])
+
+          if tenant.status == "suspended"
+            return render json: { error: "Cannot impersonate a suspended tenant" }, status: :forbidden
+          end
+
+          Rails.logger.info("[Admin] Impersonation: token issued for tenant #{tenant.id} (#{tenant.slug})")
+
           token = JwtService.encode(tenant_id: tenant.id)
-          
-          render json: {
-            token: token,
-            tenant: tenant.as_json
-          }
+          render json: { token: token, tenant: tenant.as_json }
         end
 
         private
@@ -57,6 +76,10 @@ module Api
         def tenant_params
           # Super admins can update these critical fields
           params.permit(:plan, :plan_email_limit, :status, :mode, :current_period_ends_at)
+        end
+
+        def tenant_create_params
+          params.permit(:name, :email, :password, :mode, :plan)
         end
       end
     end

@@ -8,6 +8,8 @@ export function useProviderConnections() {
   return useQuery({
     queryKey: ["providerConnections"],
     queryFn: () => providersService.listConnections(),
+    staleTime: 3 * 60 * 1000,
+    refetchInterval: 3 * 60 * 1000,
   })
 }
 
@@ -39,6 +41,7 @@ export function useRoutingRules() {
   return useQuery({
     queryKey: ["routingRules"],
     queryFn: () => providersService.listRules(),
+    staleTime: 10 * 60 * 1000,
   })
 }
 

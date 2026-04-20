@@ -4,7 +4,7 @@ class Domain < ApplicationRecord
   has_many   :emails
 
   validates :domain, presence: true, uniqueness: { scope: :tenant_id }
-  validates :status, presence: true, inclusion: { in: %w[pending verified failed] }
+  validates :status, presence: true, inclusion: { in: %w[pending pending_verification verified failed] }
 
   scope :verified, -> { where(status: "verified") }
   scope :pending,  -> { where(status: "pending") }

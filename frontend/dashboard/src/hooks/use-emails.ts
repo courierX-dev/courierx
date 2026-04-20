@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { emailsService } from "@/services/emails.service"
 import type { ListEmailsParams } from "@/services/emails.service"
 
@@ -6,6 +6,8 @@ export function useEmails(params: ListEmailsParams = {}) {
   return useQuery({
     queryKey: ["emails", params],
     queryFn: () => emailsService.list(params),
+    staleTime: 30 * 1000,
+    placeholderData: keepPreviousData,
   })
 }
 

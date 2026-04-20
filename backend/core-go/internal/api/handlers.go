@@ -47,6 +47,33 @@ func NewHandler(
 	}
 }
 
+// ProviderStats returns aggregate delivery stats per provider for a project.
+// Query params: project_id (required), since (optional, RFC3339 datetime, default 7 days ago).
+func (h *Handler) ProviderStats(c *fiber.Ctx) error {
+	projectID := c.Query("project_id")
+	if projectID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "project_id query parameter is required",
+		})
+	}
+
+	since := time.Now().UTC().AddDate(0, 0, -7)
+	if raw := c.Query("since"); raw != "" {
+		if t, err := time.Parse(time.RFC3339, raw); err == nil {
+			since = t
+		}
+	}
+
+	stats, err := db.GetProviderStats(c.Context(), h.dbPool, projectID, since)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch provider stats: " + err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{"stats": stats})
+}
+
 // HealthLive is the liveness probe — returns 200 if the process is alive.
 // Kubernetes uses this to decide whether to restart the pod.
 func (h *Handler) HealthLive(c *fiber.Ctx) error {
@@ -271,6 +298,7 @@ func (h *Handler) sendOne(ctx context.Context, batch types.BulkSendRequest, reci
 		Subject:   batch.Subject,
 		HTML:      batch.HTML,
 		Text:      batch.Text,
+		ReplyTo:   batch.ReplyTo,
 		Variables: recipient.Variables,
 		Tags:      batch.Tags,
 		ProjectID: batch.ProjectID,
@@ -345,6 +373,8 @@ func (h *Handler) logMessage(req types.SendRequest, resp types.SendResponse) {
 		ToEmail:        req.To,
 		FromEmail:      req.From,
 		Subject:        req.Subject,
+		BodyHTML:       req.HTML,
+		BodyText:       req.Text,
 		ProviderUsed:   resp.Provider,
 		Status:         status,
 		Tags:           req.Tags,

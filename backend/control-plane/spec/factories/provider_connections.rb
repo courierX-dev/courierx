@@ -9,7 +9,7 @@ FactoryBot.define do
     weight { 100 }
     priority { 1 }
     api_key { "test_api_key_#{SecureRandom.hex(8)}" }
-    display_name { nil }
+    display_name { "#{provider.capitalize} Connection" }
     consecutive_failures { 0 }
 
     trait :mailgun do

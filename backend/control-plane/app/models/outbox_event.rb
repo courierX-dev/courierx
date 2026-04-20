@@ -24,11 +24,10 @@ class OutboxEvent < ApplicationRecord
     if attempt_count >= max_attempts
       update!(status: "dead", last_error: error)
     else
-      update!(
-        status: "pending",
-        last_error: error,
-        process_after: Time.current + (2**attempt_count).minutes
-      )
+      # Reset to pending without a delay — Sidekiq's own exponential backoff
+      # is the sole retry schedule. Setting process_after here stacks a second
+      # delay on top of Sidekiq's, causing backoff to grow faster than intended.
+      update!(status: "pending", last_error: error)
     end
   end
 end

@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -38,24 +39,50 @@ func NewProvider(config types.ProviderConfig) (Provider, error) {
 	}
 }
 
+// PermanentError signals that the error is not retryable across providers.
+// Providers should return this type for auth failures, invalid addresses, etc.
+type PermanentError struct {
+	Code    int
+	Message string
+}
+
+func (e *PermanentError) Error() string { return e.Message }
+
+// RateLimitError signals that the provider is rate-limiting; failover to next.
+type RateLimitError struct {
+	Message string
+}
+
+func (e *RateLimitError) Error() string { return e.Message }
+
 // ErrorClassification categorises send errors for routing decisions.
 type ErrorClassification string
 
 const (
-	ErrorPermanent  ErrorClassification = "permanent"
-	ErrorTransient  ErrorClassification = "transient"
-	ErrorRateLimit  ErrorClassification = "rate_limit"
+	ErrorPermanent ErrorClassification = "permanent"
+	ErrorTransient ErrorClassification = "transient"
+	ErrorRateLimit ErrorClassification = "rate_limit"
 )
 
 // ClassifyError determines whether an error warrants failover.
-// Permanent errors are NOT retried with other providers.
-// Transient and rate-limit errors trigger failover to the next provider.
+// Typed errors (*PermanentError, *RateLimitError) take precedence over
+// string-matching so provider API changes don't silently flip classification.
 func ClassifyError(err error) ErrorClassification {
 	if err == nil {
 		return ""
 	}
-	s := strings.ToLower(err.Error())
 
+	var permErr *PermanentError
+	if errors.As(err, &permErr) {
+		return ErrorPermanent
+	}
+
+	var rlErr *RateLimitError
+	if errors.As(err, &rlErr) {
+		return ErrorRateLimit
+	}
+
+	s := strings.ToLower(err.Error())
 	switch {
 	case containsAny(s, "invalid email", "unauthorized", "authentication failed",
 		"invalid api key", "bad request", "malformed", "forbidden",

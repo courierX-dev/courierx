@@ -19,39 +19,47 @@ type RouterRecorder interface {
 
 // Router selects providers and performs automatic failover.
 type Router struct {
-	routes   []types.Route // sorted by Priority ascending
-	recorder RouterRecorder
+	providers []Provider // instantiated at construction, sorted by priority
+	recorder  RouterRecorder
 }
 
-// NewRouter creates a Router with the given provider routes and optional recorder.
+// NewRouter creates a Router with providers instantiated upfront from the given
+// routes. Pre-instantiation reuses http.Client connection pools across sends
+// instead of creating a new pool on every delivery attempt.
 func NewRouter(routes []types.Route, recorder RouterRecorder) *Router {
 	sorted := make([]types.Route, len(routes))
 	copy(sorted, routes)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Priority < sorted[j].Priority
 	})
-	return &Router{routes: sorted, recorder: recorder}
+
+	provs := make([]Provider, 0, len(sorted))
+	for _, route := range sorted {
+		p, err := NewProvider(route.Provider)
+		if err != nil {
+			slog.Error("failed to initialize provider",
+				"provider", route.Provider.Type,
+				"error", err)
+			continue
+		}
+		provs = append(provs, p)
+	}
+
+	return &Router{providers: provs, recorder: recorder}
 }
 
-// Send attempts to deliver the email through the route chain.
+// Send attempts to deliver the email through the provider chain.
 // On transient / rate-limit errors it advances to the next provider.
 // On permanent errors it stops immediately.
 func (r *Router) Send(ctx context.Context, req *types.SendRequest) (*types.SendResponse, error) {
-	if len(r.routes) == 0 {
+	if len(r.providers) == 0 {
 		return nil, fmt.Errorf("no provider routes configured")
 	}
 
 	var lastErr error
 
-	for i, route := range r.routes {
-		providerName := string(route.Provider.Type)
-
-		provider, err := NewProvider(route.Provider)
-		if err != nil {
-			slog.Error("failed to create provider", "provider", providerName, "error", err)
-			lastErr = err
-			continue
-		}
+	for i, provider := range r.providers {
+		providerName := provider.Name()
 
 		start := time.Now()
 		resp, err := provider.Send(ctx, req)
@@ -82,14 +90,14 @@ func (r *Router) Send(ctx context.Context, req *types.SendRequest) (*types.SendR
 			"error", err)
 		lastErr = err
 
-		// Permanent errors — stop immediately
+		// Permanent errors — stop immediately, no failover
 		if classification == ErrorPermanent {
 			return nil, fmt.Errorf("permanent error from %s: %w", providerName, err)
 		}
 
 		// Transient / rate-limit — try next provider
-		if i < len(r.routes)-1 {
-			nextProvider := string(r.routes[i+1].Provider.Type)
+		if i < len(r.providers)-1 {
+			nextProvider := r.providers[i+1].Name()
 			slog.Info("failing over to next provider",
 				"from", providerName,
 				"to", nextProvider)

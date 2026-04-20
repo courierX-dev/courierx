@@ -48,6 +48,7 @@ type BulkSendRequest struct {
 	Subject    string      `json:"subject"`
 	HTML       string      `json:"html"`
 	Text       string      `json:"text"`
+	ReplyTo    string      `json:"replyTo,omitempty"`
 	Recipients []Recipient `json:"recipients"`
 	Tags       []string    `json:"tags,omitempty"`
 	ProjectID  string      `json:"projectId,omitempty"`
@@ -105,6 +106,8 @@ type Message struct {
 	ToEmail        string            `json:"toEmail"`
 	FromEmail      string            `json:"fromEmail"`
 	Subject        string            `json:"subject"`
+	BodyHTML       string            `json:"bodyHtml,omitempty"`
+	BodyText       string            `json:"bodyText,omitempty"`
 	ProviderUsed   string            `json:"providerUsed"`
 	Status         string            `json:"status"` // "sent" | "failed"
 	Tags           []string          `json:"tags,omitempty"`

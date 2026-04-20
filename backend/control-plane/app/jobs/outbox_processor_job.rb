@@ -15,12 +15,18 @@ class OutboxProcessorJob
   GO_SHARED_SECRET = ENV.fetch("GO_CORE_SECRET", "dev-secret")
 
   def perform(outbox_event_id)
+    # Atomic status transition — prevents double-processing when two Sidekiq
+    # workers race on the same event (retry storms, duplicate enqueues).
+    updated = OutboxEvent.where(id: outbox_event_id, status: "pending")
+                         .update_all(status: "processing",
+                                     attempt_count: Arel.sql("attempt_count + 1"))
+    return if updated.zero?
+
     event = OutboxEvent.find(outbox_event_id)
-    return if event.status == "processed"
 
-    event.process!
-
-    email  = Email.find(event.payload["email_id"])
+    # Assign email before entering the rescue boundary so mark_failed! is
+    # always reachable even if a later step raises.
+    email  = Email.find_by(id: event.payload["email_id"])
     tenant = Tenant.find(event.payload["tenant_id"])
 
     # Format addresses — Go expects "Name <email>" or plain "email"
@@ -46,8 +52,10 @@ class OutboxProcessorJob
     routes = build_provider_routes(tenant, email)
     payload[:providers] = routes if routes.any?
 
-    # POST to Go engine — header name must match middleware.InternalAuth in Go
-    response = Faraday.post("#{GO_ENGINE_URL}/v1/send") do |req|
+    # SECURITY: Do not enable Faraday body logging on this connection — the
+    # request payload contains per-tenant provider credentials in plaintext.
+    conn = Faraday.new(GO_ENGINE_URL)
+    response = conn.post("/v1/send") do |req|
       req.headers["Content-Type"]      = "application/json"
       req.headers["X-Internal-Secret"] = GO_SHARED_SECRET
       req.body = payload.to_json

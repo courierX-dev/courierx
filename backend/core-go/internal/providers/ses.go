@@ -115,10 +115,8 @@ func (p *SESProvider) Send(ctx context.Context, req *types.SendRequest) (*types.
 		},
 	}
 
-	// Tags
-	for _, tag := range req.Tags {
-		sesReq.EmailTags = append(sesReq.EmailTags, sesTag{Name: tag, Value: tag})
-	}
+	// Tags: SES requires distinct Name and Value per tag with strict character
+	// constraints. Omitted until a sanitized name:value convention is established.
 
 	payload, err := json.Marshal(sesReq)
 	if err != nil {

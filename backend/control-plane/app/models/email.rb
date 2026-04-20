@@ -5,7 +5,12 @@ class Email < ApplicationRecord
   belongs_to :provider_connection, optional: true
   belongs_to :domain,              optional: true
   belongs_to :mcp_connection,      optional: true
+  belongs_to :email_template,      optional: true
   has_many   :email_events, dependent: :destroy
+
+  belongs_to :outbox_event, optional: true
+
+  before_validation { self.to_email = to_email&.downcase&.strip }
 
   validates :from_email, presence: true
   validates :to_email,   presence: true

@@ -1,9 +1,12 @@
 package api
 
 import (
+	"crypto/subtle"
+
 	"github.com/courierx/core-go/internal/config"
 	"github.com/courierx/core-go/internal/middleware"
 	"github.com/courierx/core-go/internal/observability"
+	"github.com/courierx/core-go/internal/ratelimit"
 	"github.com/courierx/core-go/internal/types"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
@@ -15,28 +18,31 @@ import (
 func SetupRoutes(app *fiber.App, dbPool *pgxpool.Pool, cfg *config.Config, prom *observability.Prom) {
 	routes := buildRoutesFromConfig(cfg)
 
-	idem := middleware.NewIdempotencyStore(cfg.IdempotencyTTLSeconds)
+	idem    := middleware.NewIdempotencyStore(cfg.IdempotencyTTLSeconds, cfg.RedisURL)
+	limiter := ratelimit.New(cfg.RateLimitProvider)
 	handler := NewHandler(dbPool, routes, prom, idem, cfg.MaxWorkers)
 
 	// ── Global middleware (applied to all routes) ─────────────────────────────
 	app.Use(middleware.RequestID())
 	app.Use(middleware.StructuredLogger())
 
-	// ── Health probes (unauthenticated) ───────────────────────────────────────
-	// /health/live  — liveness  (is the process running?)
-	// /health/ready — readiness (are dependencies healthy?)
-	// /health       — legacy combined (backward compat)
-	app.Get("/health", handler.HealthCheck)
-	app.Get("/health/live", handler.HealthLive)
+	// ── Health probes (unauthenticated, no rate limit — used by load balancers) ─
+	app.Get("/health",       handler.HealthCheck)
+	app.Get("/health/live",  handler.HealthLive)
 	app.Get("/health/ready", handler.HealthReady)
 
 	// ── Prometheus metrics scrape endpoint ────────────────────────────────────
+	// SECURITY: Protected by bearer token when METRICS_TOKEN is set.
+	// Without a token, access is still restricted to loopback/private-range IPs
+	// (enforced by the metricsAuth middleware below).
+	// The CORS wildcard on the main app does NOT apply here — this group has
+	// its own middleware chain.
 	if cfg.EnableMetrics && prom != nil {
 		promHandler := promhttp.HandlerFor(
 			prom.Registry(),
 			promhttp.HandlerOpts{EnableOpenMetrics: true},
 		)
-		app.Get("/metrics", adaptor.HTTPHandler(promHandler))
+		app.Get("/metrics", metricsAuth(cfg.MetricsToken), adaptor.HTTPHandler(promHandler))
 	}
 
 	// ── Internal API (Rails → Go) ─────────────────────────────────────────────
@@ -44,9 +50,63 @@ func SetupRoutes(app *fiber.App, dbPool *pgxpool.Pool, cfg *config.Config, prom 
 	internal.Post("/verify-provider", handler.VerifyProvider)
 
 	// ── Authenticated v1 API ──────────────────────────────────────────────────
-	v1 := app.Group("/v1", middleware.InternalAuth(cfg.InternalSecret))
-	v1.Post("/send", handler.Send)
-	v1.Post("/send/batch", handler.BulkSend)
+	v1 := app.Group("/v1",
+		middleware.InternalAuth(cfg.InternalSecret),
+		providerRateLimitMiddleware(limiter),
+	)
+	v1.Post("/send",              handler.Send)
+	v1.Post("/send/batch",        handler.BulkSend)
+	v1.Get("/stats/providers",    handler.ProviderStats)
+}
+
+// metricsAuth returns middleware that protects the /metrics endpoint.
+// If a token is configured: require "Authorization: Bearer <token>".
+// If no token: allow only requests from loopback (127.x / ::1) addresses.
+func metricsAuth(token string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if token != "" {
+			provided := ""
+			auth := c.Get("Authorization")
+			if len(auth) > 7 && auth[:7] == "Bearer " {
+				provided = auth[7:]
+			}
+			if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "metrics endpoint requires authentication",
+				})
+			}
+			return c.Next()
+		}
+
+		// No token configured — restrict to local addresses only
+		ip := c.IP()
+		if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
+			return c.Next()
+		}
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "metrics endpoint is not publicly accessible; set METRICS_TOKEN to enable external access",
+		})
+	}
+}
+
+// providerRateLimitMiddleware applies the token-bucket limiter per provider.
+// The provider name is extracted from the X-Provider-Name header (set by the
+// Rails control plane when routing to a specific provider). Falls back to "global".
+func providerRateLimitMiddleware(limiter *ratelimit.Limiter) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		provider := c.Get("X-Provider-Name")
+		if provider == "" {
+			provider = "global"
+		}
+		if !limiter.Allow(provider) {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error":    "provider rate limit exceeded",
+				"code":     "provider_rate_limit",
+				"provider": provider,
+			})
+		}
+		return c.Next()
+	}
 }
 
 // buildRoutesFromConfig constructs the provider failover chain from environment config.

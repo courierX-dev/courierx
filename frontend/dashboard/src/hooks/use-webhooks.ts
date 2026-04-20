@@ -5,6 +5,7 @@ export function useWebhooks() {
   return useQuery({
     queryKey: ["webhooks"],
     queryFn: () => webhooksService.list(),
+    staleTime: 5 * 60 * 1000,  // webhooks rarely change
   })
 }
 

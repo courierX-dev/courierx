@@ -13,6 +13,10 @@ class Tenant < ApplicationRecord
   has_many :webhook_endpoints,     dependent: :destroy
   has_many :mcp_connections,       dependent: :destroy
   has_many :usage_stats,           dependent: :destroy
+  has_many :email_templates,       dependent: :destroy
+  has_many :memberships,           dependent: :destroy
+  has_many :users,                 through:   :memberships
+  has_many :invitations,           dependent: :destroy
 
   # ── Validations ──
   validates :password, length: { minimum: 8 }, on: :create
@@ -35,13 +39,18 @@ class Tenant < ApplicationRecord
 
   def generate_slug
     return if self.slug.present?
-    
+
     base_slug = name&.parameterize
-    self.slug = base_slug
-    
-    # Ensure uniqueness
-    if Tenant.exists?(slug: base_slug)
-      self.slug = "#{base_slug}-#{SecureRandom.hex(3)}"
+    candidate = base_slug
+
+    # Reduce the TOCTOU window by checking before assignment; the DB unique
+    # index is the definitive guard — any residual race surfaces as a
+    # validation error rather than a 500.
+    loop do
+      break unless Tenant.exists?(slug: candidate)
+      candidate = "#{base_slug}-#{SecureRandom.hex(3)}"
     end
+
+    self.slug = candidate
   end
 end

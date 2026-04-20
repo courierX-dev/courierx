@@ -13,8 +13,10 @@ class ProviderConnection < ApplicationRecord
   validates :mode,     presence: true, inclusion: { in: MODES }
   validates :status,   presence: true, inclusion: { in: STATUSES }
   validates :weight,   presence: true, numericality: { greater_than: 0 }
-  validates :priority, presence: true, numericality: { greater_than: 0 }
-  validates :provider, uniqueness: { scope: [:tenant_id, :mode] }
+  validates :priority,     presence: true, numericality: { greater_than: 0 }
+  validates :display_name, presence: true
+  validates :provider, uniqueness: { scope: [:tenant_id, :mode, :display_name],
+                                     message: "A connection with this provider and name already exists" }
 
   scope :active,      -> { where(status: "active") }
   scope :by_priority, -> { order(priority: :asc) }

@@ -6,6 +6,7 @@ export function useApiKeys() {
   return useQuery({
     queryKey: ["apiKeys"],
     queryFn: () => apiKeysService.list(),
+    staleTime: 10 * 60 * 1000,
   })
 }
 

@@ -6,6 +6,8 @@ export function useSuppressions(params: { reason?: string } = {}) {
   return useQuery({
     queryKey: ["suppressions", params],
     queryFn: () => suppressionsService.list(params),
+    staleTime: 60 * 1000,       // suppressions change via sync job (~1 min)
+    refetchInterval: 60 * 1000,
   })
 }
 

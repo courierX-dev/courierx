@@ -5,20 +5,30 @@
 package template
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"sync"
 
 	"github.com/aymerick/raymond"
 )
 
-// Engine is a thread-safe Handlebars template renderer with an LRU-style sync.Map cache.
+const defaultMaxCacheSize = 1000
+
+// Engine is a thread-safe Handlebars template renderer with a bounded cache.
+// When the cache reaches maxSize all entries are evicted (simple flush strategy)
+// to keep memory bounded without introducing an LRU dependency.
 type Engine struct {
-	cache sync.Map // source string → *raymond.Template
+	mu      sync.RWMutex
+	cache   map[string]*raymond.Template
+	maxSize int
 }
 
 // NewEngine returns a ready Engine.
 func NewEngine() *Engine {
-	return &Engine{}
+	return &Engine{
+		cache:   make(map[string]*raymond.Template, defaultMaxCacheSize),
+		maxSize: defaultMaxCacheSize,
+	}
 }
 
 // Render compiles (or retrieves from cache) the template source and executes it
@@ -53,30 +63,51 @@ func (e *Engine) RenderSubject(subject string, variables map[string]interface{})
 }
 
 // CacheSize returns the number of entries currently in the template cache.
-// Useful for health checks and metrics.
 func (e *Engine) CacheSize() int {
-	n := 0
-	e.cache.Range(func(_, _ interface{}) bool {
-		n++
-		return true
-	})
-	return n
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return len(e.cache)
 }
 
 // — internal —
 
 func (e *Engine) compile(source string) (*raymond.Template, error) {
-	// Fast path: already compiled
-	if val, ok := e.cache.Load(source); ok {
-		return val.(*raymond.Template), nil
+	key := cacheKey(source)
+
+	// Fast path: already compiled.
+	e.mu.RLock()
+	if tmpl, ok := e.cache[key]; ok {
+		e.mu.RUnlock()
+		return tmpl, nil
 	}
+	e.mu.RUnlock()
 
 	tmpl, err := raymond.Parse(source)
 	if err != nil {
 		return nil, err
 	}
 
-	// Store — if another goroutine stored first, use that copy
-	actual, _ := e.cache.LoadOrStore(source, tmpl)
-	return actual.(*raymond.Template), nil
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Evict all entries when the cache is full to keep memory bounded.
+	if len(e.cache) >= e.maxSize {
+		e.cache = make(map[string]*raymond.Template, e.maxSize)
+	}
+
+	// Another goroutine may have inserted while we were compiling; prefer the
+	// existing entry to avoid holding two compiled copies of the same template.
+	if existing, ok := e.cache[key]; ok {
+		return existing, nil
+	}
+	e.cache[key] = tmpl
+	return tmpl, nil
+}
+
+// cacheKey returns a hex-encoded SHA-256 hash of the source string.
+// Using a hash as the key keeps per-entry memory constant regardless of
+// template length, which matters for bulk sends with large HTML bodies.
+func cacheKey(source string) string {
+	h := sha256.Sum256([]byte(source))
+	return fmt.Sprintf("%x", h)
 }

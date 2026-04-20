@@ -130,6 +130,16 @@ jobs:
         working-directory: control-plane
         run: bundle exec rspec --format documentation || echo "Tests skipped - no specs found yet"
 
+      - name: Run Brakeman security scan
+        working-directory: control-plane
+        run: bundle exec brakeman --no-pager -q
+
+      - name: Run Bundler Audit
+        working-directory: control-plane
+        run: |
+          bundle exec bundle-audit update
+          bundle exec bundle-audit check
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest

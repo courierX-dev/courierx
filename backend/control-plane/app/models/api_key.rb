@@ -13,7 +13,14 @@ class ApiKey < ApplicationRecord
 
   def self.authenticate(raw_key)
     hash = Digest::SHA256.hexdigest(raw_key)
-    active.find_by(key_hash: hash)&.tap { |k| k.touch(:last_used_at) }
+    key  = active.find_by(key_hash: hash)
+    return nil unless key
+    return nil if key.expired?
+
+    # Lazily expire the record so future DB queries also see it as expired
+    key.update_columns(status: "expired") if key.expires_at.present? && key.expires_at < Time.current
+
+    key.tap { |k| k.touch(:last_used_at) }
   end
 
   # ── Instance methods ──

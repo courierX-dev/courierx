@@ -23,12 +23,14 @@ func LogMessage(ctx context.Context, pool *pgxpool.Pool, msg *types.Message) err
 	_, err := pool.Exec(ctx, `
 		INSERT INTO messages (
 			id, tenant_id, project_id, to_email, from_email, subject,
+			body_html, body_text,
 			provider_used, status, tags, metadata, idempotency_key,
 			duration_ms, created_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13
+			$7, $8,
+			$9, $10, $11, $12, $13,
+			$14, $15
 		) ON CONFLICT (id) DO NOTHING`,
 		msg.ID,
 		msg.TenantID,
@@ -36,6 +38,8 @@ func LogMessage(ctx context.Context, pool *pgxpool.Pool, msg *types.Message) err
 		msg.ToEmail,
 		msg.FromEmail,
 		msg.Subject,
+		nullString(msg.BodyHTML),
+		nullString(msg.BodyText),
 		msg.ProviderUsed,
 		msg.Status,
 		tagsJSON,

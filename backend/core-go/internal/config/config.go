@@ -54,7 +54,13 @@ type Config struct {
 	// Security
 	// InternalSecret is shared between the Rails Control Plane and this service.
 	// Set X-Internal-Secret header on every request from the control plane.
+	// REQUIRED: if not set, all requests to authenticated routes will be rejected (fail-closed).
 	InternalSecret string
+
+	// MetricsToken is the bearer token required to scrape /metrics.
+	// If empty, metrics are only served when EnableMetrics is true AND the request
+	// comes from a loopback/private-network address (best-effort; set a token for production).
+	MetricsToken string
 
 	// Control Plane (for pulling provider configs at boot)
 	ControlPlaneURL string
@@ -100,6 +106,7 @@ func Load() *Config {
 		RateLimitProvider: getEnvInt("RATE_LIMIT_PER_PROVIDER", 1000),
 
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
+		MetricsToken:   getEnv("METRICS_TOKEN", ""),
 
 		ControlPlaneURL: getEnv("CONTROL_PLANE_URL", "http://localhost:4000"),
 
@@ -122,12 +129,21 @@ func (c *Config) IsProduction() bool {
 }
 
 // Validate performs a basic sanity check on critical settings.
+// NOTE: InternalSecret being empty is now handled as fail-closed in the middleware
+// (all requests to protected routes are rejected), not just a production error.
+// Validate still warns so the startup logs make the misconfiguration obvious.
 func (c *Config) Validate() error {
 	if c.DatabaseURL == "" || c.DatabaseURL == "skip" {
 		fmt.Println("Warning: running without database — message logging disabled")
 	}
-	if c.InternalSecret == "" && c.IsProduction() {
-		return fmt.Errorf("INTERNAL_SECRET is required in production")
+	if c.InternalSecret == "" {
+		if c.IsProduction() {
+			return fmt.Errorf("INTERNAL_SECRET is required — refusing to start in production without it")
+		}
+		fmt.Println("Warning: INTERNAL_SECRET is not set. All requests to /v1/* and /internal/* will be rejected with 503 until this is configured.")
+	}
+	if c.MetricsToken == "" && c.EnableMetrics {
+		fmt.Println("Warning: METRICS_TOKEN is not set. The /metrics endpoint will apply IP-based restrictions only.")
 	}
 	return nil
 }

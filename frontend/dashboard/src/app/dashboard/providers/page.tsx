@@ -1,9 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, Server, RefreshCw } from "lucide-react"
+import { Plus, Server, RefreshCw, Key, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { DotIndicator } from "@/components/ui/dot-indicator"
 import { PageShell } from "@/components/dashboard/page-shell"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { SectionError } from "@/components/dashboard/inline-error"
@@ -27,8 +26,127 @@ const PROVIDER_LABELS: Record<string, string> = {
   resend: "Resend",
 }
 
+const PROVIDER_TYPES: Record<string, string> = {
+  sendgrid: "API Gateway",
+  mailgun: "API Gateway",
+  ses: "Cloud Service",
+  aws_ses: "Cloud Service",
+  smtp: "Direct SMTP",
+  postmark: "API Gateway",
+  resend: "API Gateway",
+}
+
 function providerLabel(provider: string) {
   return PROVIDER_LABELS[provider] ?? provider
+}
+
+function ProviderCard({
+  conn,
+  onVerify,
+  onDelete,
+  isVerifying,
+  isDeleting,
+}: {
+  conn: ProviderConnection
+  onVerify: () => void
+  onDelete: () => void
+  isVerifying: boolean
+  isDeleting: boolean
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const connected = conn.status === "active"
+  const maskedKey = "sk_live_\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(maskedKey)
+    setCopied(true)
+    toast.success("Copied to clipboard")
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-xl shadow-card p-5">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center text-sm font-bold text-foreground/80 shrink-0">
+          {providerLabel(conn.provider).charAt(0)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-foreground">
+            {conn.display_name ?? providerLabel(conn.provider)}
+          </div>
+          <div className="text-xs text-muted-foreground mt-[1px]">
+            {PROVIDER_TYPES[conn.provider] ?? "Provider"}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {conn.priority === 1 && (
+            <span className="text-[11px] font-medium px-2 py-[2px] rounded-full bg-[#EFF6FF] text-primary border border-[#BFDBFE] dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800">
+              Default
+            </span>
+          )}
+          <span
+            className={cn(
+              "text-[11px] font-medium px-2 py-[2px] rounded-full border",
+              connected
+                ? "bg-[#ECFDF5] text-[#10B981] border-[#A7F3D0] dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800"
+                : "bg-[#FEF2F2] text-destructive border-[#FECACA] dark:bg-red-950 dark:text-red-400 dark:border-red-800"
+            )}
+          >
+            {connected ? "Connected" : "Error"}
+          </span>
+        </div>
+      </div>
+
+      {/* API key row */}
+      <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-[10px] py-[7px] mb-3">
+        <Key className="h-3 w-3 text-muted-foreground shrink-0" />
+        <span className="font-mono text-xs text-muted-foreground flex-1 truncate">{maskedKey}</span>
+        <button onClick={handleCopy} className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Copy API key">
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        </button>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <button
+          onClick={onVerify}
+          disabled={isVerifying}
+          className="text-xs font-medium px-[10px] py-[5px] rounded-[7px] border border-border bg-card text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50 flex items-center gap-1.5"
+        >
+          <RefreshCw className={cn("h-3 w-3", isVerifying && "animate-spin")} />
+          Verify
+        </button>
+        {confirmDelete ? (
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-xs text-muted-foreground">Disconnect?</span>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              disabled={isDeleting}
+              className="text-xs font-medium px-[10px] py-[5px] rounded-[7px] border border-border bg-card text-foreground/80 hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={isDeleting}
+              className="text-xs font-medium px-[10px] py-[5px] rounded-[7px] border border-[#FECACA] bg-[#FEF2F2] text-destructive hover:bg-red-100 transition-colors disabled:opacity-50 dark:bg-red-950 dark:border-red-800"
+            >
+              {isDeleting ? "Removing..." : "Remove"}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="text-xs font-medium px-[10px] py-[5px] rounded-[7px] border border-[#FECACA] bg-[#FEF2F2] text-destructive hover:bg-red-100 transition-colors ml-auto dark:bg-red-950 dark:border-red-800"
+          >
+            Disconnect
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function ProvidersPage() {
@@ -36,7 +154,6 @@ export default function ProvidersPage() {
   const deleteMutation = useDeleteProviderConnection()
   const verifyMutation = useVerifyProviderConnection()
   const [connectOpen, setConnectOpen] = useState(false)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
 
   async function handleDelete(conn: ProviderConnection) {
@@ -45,8 +162,6 @@ export default function ProvidersPage() {
       toast.success("Provider disconnected", { description: providerLabel(conn.provider) })
     } catch {
       toast.error("Failed to disconnect provider")
-    } finally {
-      setConfirmDeleteId(null)
     }
   }
 
@@ -68,21 +183,19 @@ export default function ProvidersPage() {
     }
   }
 
-  // Loading state
   if (isLoading) {
     return (
       <PageShell>
         <PageHeader title="Providers" subtitle="Connect your email provider accounts" />
-        <div className="space-y-2" aria-busy="true">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy="true">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
+            <div key={i} className="h-[180px] rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
       </PageShell>
     )
   }
 
-  // Error state
   if (isError) {
     return (
       <PageShell>
@@ -97,13 +210,12 @@ export default function ProvidersPage() {
   return (
     <PageShell>
       <PageHeader title="Providers" subtitle="Connect your email provider accounts">
-        <Button size="sm" className="h-8 gap-1.5" onClick={() => setConnectOpen(true)}>
+        <Button size="sm" className="h-8 gap-1.5 rounded-lg" onClick={() => setConnectOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
           Connect provider
         </Button>
       </PageHeader>
 
-      {/* Empty state */}
       {providers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Server className="mb-4 h-10 w-10 text-muted-foreground" />
@@ -116,123 +228,35 @@ export default function ProvidersPage() {
           </Button>
         </div>
       ) : (
-        /* Provider table */
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/20">
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provider</th>
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Priority</th>
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Success Rate</th>
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Avg Latency</th>
-                <th className="px-4 py-2 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {providers.map((conn, i) => (
-                <tr
-                  key={conn.id}
-                  className={cn(
-                    "hover:bg-muted/20 transition-colors",
-                    i < providers.length - 1 && "border-b border-border/50",
-                  )}
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{conn.display_name ?? providerLabel(conn.provider)}</span>
-                      {conn.display_name && (
-                        <span className="text-[11px] text-muted-foreground">{providerLabel(conn.provider)}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <DotIndicator status={conn.status === "active" ? "active" : conn.status === "degraded" ? "degraded" : "inactive"} />
-                      <span className="text-xs capitalize">{conn.status}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
-                    {conn.priority}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden lg:table-cell">
-                    {conn.success_rate != null ? `${conn.success_rate.toFixed(1)}%` : "—"}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden lg:table-cell">
-                    {conn.avg_latency_ms != null ? `${conn.avg_latency_ms}ms` : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {confirmDeleteId === conn.id ? (
-                      <div className="flex items-center justify-end gap-1.5">
-                        <span className="text-xs text-muted-foreground">Disconnect?</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => setConfirmDeleteId(null)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => handleDelete(conn)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          {deleteMutation.isPending ? "Removing…" : "Remove"}
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs text-muted-foreground gap-1"
-                          disabled={verifyingId === conn.id}
-                          onClick={() => handleVerify(conn)}
-                          aria-label="Verify credentials"
-                        >
-                          <RefreshCw className={cn("h-3 w-3", verifyingId === conn.id && "animate-spin")} />
-                          Verify
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                          aria-label="Disconnect provider"
-                          onClick={() => setConfirmDeleteId(conn.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {providers.map((conn) => (
+            <ProviderCard
+              key={conn.id}
+              conn={conn}
+              onVerify={() => handleVerify(conn)}
+              onDelete={() => handleDelete(conn)}
+              isVerifying={verifyingId === conn.id}
+              isDeleting={deleteMutation.isPending}
+            />
+          ))}
         </div>
       )}
 
-      {/* BYOK + subdomain info callout */}
-      <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground space-y-2">
-        <p className="font-medium text-foreground">Bring Your Own Keys</p>
+      {/* BYOK info */}
+      <div className="rounded-xl border border-border/60 bg-muted/30 px-5 py-4 text-xs text-muted-foreground space-y-2">
+        <p className="font-semibold text-foreground">Bring your own keys</p>
         <p>
           Provider credentials are encrypted at rest with AES-256 and verified server-side.
           CourierX never stores or logs your raw API keys.
         </p>
-        <p className="font-medium text-foreground pt-1">Multi-provider DNS setup</p>
+        <p className="font-semibold text-foreground pt-1">Multi-provider DNS setup</p>
         <p>
           When using multiple providers, use a <span className="font-mono text-foreground">subdomain per provider</span> to
           avoid DKIM record conflicts. For example: <span className="font-mono text-foreground">mail.example.com</span> for
           SendGrid and <span className="font-mono text-foreground">mg.example.com</span> for Mailgun.
-          Each subdomain gets its own independent DKIM records with no conflicts.
         </p>
       </div>
 
-      {/* Connect dialog */}
       <ConnectProviderDialog open={connectOpen} onOpenChange={setConnectOpen} />
     </PageShell>
   )

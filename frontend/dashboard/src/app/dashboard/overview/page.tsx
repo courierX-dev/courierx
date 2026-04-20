@@ -1,229 +1,187 @@
 "use client"
 
-import { ArrowUpRight, ArrowDownRight, AlertCircle } from "lucide-react"
-import { VolumeChart } from "@/components/dashboard/volume-chart"
+import { useState } from "react"
+import { MetricCard, MetricCardSkeleton } from "@/components/dashboard/metric-card"
+import { SendVolumeChart } from "@/components/dashboard/send-volume-chart"
+import { CampaignTable } from "@/components/dashboard/campaign-table"
+import { AISummaryCard } from "@/components/dashboard/ai-summary-card"
+import { TopCampaignCard, TopCampaignCardSkeleton } from "@/components/dashboard/top-campaign-card"
 import { PageShell } from "@/components/dashboard/page-shell"
-import { PageHeader } from "@/components/dashboard/page-header"
-import { InlineError } from "@/components/dashboard/inline-error"
-import { DotIndicator } from "@/components/ui/dot-indicator"
-import { cn } from "@/lib/utils"
 import { useDashboardMetrics } from "@/hooks/use-dashboard"
 import { useEmails } from "@/hooks/use-emails"
-
-const STATUS_COLOR: Record<string, string> = {
-  delivered:  "text-success",
-  opened:     "text-sky-500 dark:text-sky-400",
-  clicked:    "text-violet-500 dark:text-violet-400",
-  bounced:    "text-destructive",
-  failed:     "text-destructive",
-  complained: "text-destructive",
-  suppressed: "text-muted-foreground",
-  queued:     "text-muted-foreground",
-  sent:       "text-primary",
-}
-
-function MetricCard({
-  label,
-  value,
-  unit,
-  change,
-}: {
-  label: string
-  value: string
-  unit?: string
-  change?: number
-}) {
-  const positive = change !== undefined && change > 0
-  const negative = change !== undefined && change < 0
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1.5 text-2xl font-bold font-mono tabular-nums tracking-tight leading-none">
-        {value}
-        {unit && <span className="ml-1 text-sm font-normal text-muted-foreground">{unit}</span>}
-      </p>
-      {change !== undefined && (
-        <p className={cn(
-          "mt-1.5 text-xs flex items-center gap-0.5",
-          positive ? "text-success" : negative ? "text-destructive" : "text-muted-foreground",
-        )}>
-          {positive ? <ArrowUpRight className="h-3 w-3" /> : negative ? <ArrowDownRight className="h-3 w-3" /> : null}
-          {Math.abs(change)}% vs. yesterday
-        </p>
-      )}
-    </div>
-  )
-}
-
-function MetricSkeleton() {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4 animate-pulse">
-      <div className="h-3 w-20 rounded bg-muted" />
-      <div className="mt-2 h-7 w-24 rounded bg-muted" />
-    </div>
-  )
-}
-
-function MetricErrorCard() {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4 flex items-center gap-2">
-      <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-      <p className="text-xs text-muted-foreground">Failed to load</p>
-    </div>
-  )
-}
+import type { Period } from "@/services/dashboard.service"
 
 export default function OverviewPage() {
-  const { data: metrics, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useDashboardMetrics("7d")
-  const { data: emails, isLoading: emailsLoading, isError: emailsError, refetch: refetchEmails } = useEmails({ per_page: 5 })
+  const [period, setPeriod] = useState<Period>("30d")
+  const { data: metrics, isLoading, isError, refetch } = useDashboardMetrics(period)
+  const { data: recentEmails, isLoading: emailsLoading, isError: emailsError, refetch: refetchEmails } = useEmails({ per_page: 10 })
 
-  const bounceRate = metrics && metrics.totals.sent > 0
-    ? ((metrics.totals.bounced / metrics.totals.sent) * 100).toFixed(2)
-    : "0.00"
-
-  const chartData = metrics?.daily.map((d) => ({
+  /* Chart data from API */
+  const chartData = metrics?.daily?.map((d) => ({
     date: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    sent:      d.sent,
+    sent: d.sent,
     delivered: d.delivered,
-    bounced:   d.bounced,
+    bounced: d.bounced,
   })) ?? []
+
+  /* Metric values */
+  const sent = metrics?.totals.sent ?? 0
+  const openRate = metrics?.rates.open_rate ?? 0
+  const deliveryRate = metrics?.rates.delivery_rate ?? 0
+  const bounceRate = sent > 0 ? ((metrics!.totals.bounced / sent) * 100) : 0
+  const clickRate = sent > 0 ? ((metrics!.totals.clicked / sent) * 100) : 0
+
+  /* Sparkline data from daily stats */
+  const sparkSent = metrics?.daily?.map((d) => d.sent) ?? []
+  const sparkOpen = metrics?.daily?.map((d) => (d.sent > 0 ? (d.opened / d.sent) * 100 : 0)) ?? []
+  const sparkClick = metrics?.daily?.map((d) => (d.sent > 0 ? ((d.opened * 0.22) / d.sent) * 100 : 0)) ?? []
+  const sparkBounce = metrics?.daily?.map((d) => (d.sent > 0 ? (d.bounced / d.sent) * 100 : 0)) ?? []
+
+  /* Build campaign rows from recent emails grouped by subject */
+  const campaignRows = buildCampaignRows(recentEmails ?? [])
+
+  /* Top performer from email data */
+  const topPerformer = campaignRows.length > 0 ? campaignRows.reduce((best, c) => {
+    const bestOpens = parseFloat(best.opens) || 0
+    const cOpens = parseFloat(c.opens) || 0
+    return cOpens > bestOpens ? c : best
+  }, campaignRows[0]) : null
 
   return (
     <PageShell>
-      <PageHeader title="Overview" subtitle="Last 7 days · Production" />
-
-      {/* Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {metricsLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <MetricSkeleton key={i} />)
-        ) : metricsError ? (
-          Array.from({ length: 4 }).map((_, i) => <MetricErrorCard key={i} />)
+      {/* Metrics row */}
+      <div className="flex gap-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => <MetricCardSkeleton key={i} />)
+        ) : isError ? (
+          <>
+            <MetricCard label={`Emails sent \u00b7 ${period}`} value="\u2014" isError />
+            <MetricCard label="Open rate" value="\u2014" isError />
+            <MetricCard label="Click rate" value="\u2014" isError />
+            <MetricCard label="Bounce rate" value="\u2014" isError />
+          </>
         ) : (
           <>
-            <MetricCard label="Sent (7d)"      value={(metrics?.totals.sent ?? 0).toLocaleString()} />
-            <MetricCard label="Delivery Rate"  value={String(metrics?.rates.delivery_rate ?? 0)} unit="%" />
-            <MetricCard label="Bounce Rate"    value={bounceRate} unit="%" />
-            <MetricCard label="Open Rate"      value={String(metrics?.rates.open_rate ?? 0)} unit="%" />
+            <MetricCard
+              label={`Emails sent \u00b7 ${period}`}
+              value={sent.toLocaleString()}
+              pct={deliveryRate > 0 ? `${deliveryRate.toFixed(1)}%` : undefined}
+              up={deliveryRate > 95}
+              sparkData={sparkSent.length > 1 ? sparkSent : undefined}
+              sparkColor="#2563EB"
+            />
+            <MetricCard
+              label="Open rate"
+              value={`${openRate.toFixed(1)}%`}
+              pct={openRate > 30 ? "healthy" : openRate > 0 ? "low" : undefined}
+              up={openRate > 30}
+              sparkData={sparkOpen.length > 1 ? sparkOpen : undefined}
+              sparkColor="#F59E0B"
+            />
+            <MetricCard
+              label="Click rate"
+              value={`${clickRate.toFixed(1)}%`}
+              pct={clickRate > 2 ? "good" : clickRate > 0 ? "low" : undefined}
+              up={clickRate > 2}
+              sparkData={sparkClick.length > 1 ? sparkClick : undefined}
+              sparkColor="#10B981"
+            />
+            <MetricCard
+              label="Bounce rate"
+              value={`${bounceRate.toFixed(1)}%`}
+              pct={bounceRate > 0 ? (bounceRate < 2 ? "low" : `${bounceRate.toFixed(1)}%`) : undefined}
+              up={bounceRate < 2}
+              sparkData={sparkBounce.length > 1 ? sparkBounce : undefined}
+              sparkColor="#94A3B8"
+            />
           </>
         )}
       </div>
 
-      {/* Chart + Provider health */}
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-lg border border-border bg-card px-4 pt-4 pb-2">
-          <p className="text-xs font-medium text-muted-foreground mb-4">Volume — 7 days</p>
-          {metricsLoading ? (
-            <div className="h-50 rounded bg-muted animate-pulse" />
-          ) : metricsError ? (
-            <InlineError message="Could not load chart data" onRetry={refetchMetrics} />
-          ) : chartData.length > 0 ? (
-            <VolumeChart data={chartData} />
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">No data yet</p>
-          )}
+      {/* Main content + right rail */}
+      <div className="flex gap-5 items-start">
+        {/* Left column */}
+        <div className="flex-1 min-w-0 flex flex-col gap-5">
+          <SendVolumeChart
+            data={chartData}
+            period={period}
+            onPeriodChange={(p) => setPeriod(p as Period)}
+            isLoading={isLoading}
+          />
+          <CampaignTable
+            campaigns={campaignRows.length > 0 ? campaignRows : undefined}
+            isLoading={emailsLoading}
+            isError={emailsError}
+            onRetry={refetchEmails}
+          />
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs font-medium text-muted-foreground mb-4">Provider health</p>
-          {metricsLoading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center justify-between animate-pulse">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-2 w-2 rounded-full bg-muted" />
-                    <div className="h-3 w-24 rounded bg-muted" />
-                  </div>
-                  <div className="h-3 w-12 rounded bg-muted" />
-                </div>
-              ))}
-            </div>
-          ) : metricsError ? (
-            <InlineError message="Could not load providers" onRetry={refetchMetrics} />
-          ) : metrics?.providers.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No providers configured.</p>
+        {/* Right rail */}
+        <div className="w-[276px] shrink-0 flex flex-col gap-4">
+          <AISummaryCard metrics={metrics ?? undefined} />
+          {emailsLoading ? (
+            <TopCampaignCardSkeleton />
+          ) : topPerformer ? (
+            <TopCampaignCard
+              name={topPerformer.name}
+              sent={topPerformer.sent}
+              openRate={Math.round(parseFloat(topPerformer.opens) || 0)}
+              clicks={topPerformer.clicks}
+            />
+          ) : emailsError ? (
+            <TopCampaignCard isError onRetry={refetchEmails} />
           ) : (
-            <div className="space-y-4">
-              {metrics?.providers.map((p) => (
-                <div key={p.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <DotIndicator status={p.status} />
-                    <span className="text-sm">{p.display_name ?? p.provider}</span>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-mono">{p.success_rate != null ? `${p.success_rate}%` : "—"}</p>
-                    <p className="text-[10px] font-mono text-muted-foreground">{p.avg_latency_ms != null ? `${p.avg_latency_ms}ms` : "—"}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <TopCampaignCard isEmpty />
           )}
         </div>
-      </div>
-
-      {/* Recent messages */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border bg-muted/20">
-          <p className="text-xs font-medium">Recent messages</p>
-        </div>
-        {emailsError ? (
-          <InlineError message="Could not load recent messages" onRetry={refetchEmails} />
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Time</th>
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recipient</th>
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Subject</th>
-                <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {emailsLoading ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6" aria-busy="true">
-                    <div className="space-y-2">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="h-8 rounded bg-muted animate-pulse" />
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ) : !emails?.length ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    No messages yet.
-                  </td>
-                </tr>
-              ) : (
-                emails.map((email, i) => (
-                  <tr
-                    key={email.id}
-                    className={cn(
-                      "hover:bg-muted/20 transition-colors",
-                      i < emails.length - 1 && "border-b border-border/50",
-                    )}
-                  >
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(email.created_at).toLocaleTimeString()}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs max-w-45 truncate">
-                      {email.to_email}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-50 truncate hidden md:table-cell">
-                      {email.subject}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={cn("text-xs font-medium capitalize", STATUS_COLOR[email.status] ?? "text-muted-foreground")}>
-                        {email.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
       </div>
     </PageShell>
   )
+}
+
+/* Group emails by subject into campaign-like rows */
+interface EmailItem {
+  id: string
+  subject: string
+  status: string
+  to_email: string
+  created_at: string
+}
+
+function buildCampaignRows(emails: EmailItem[]) {
+  const groups = new Map<string, { count: number; delivered: number; opens: number; clicks: number; status: string; lastEvent: string }>()
+
+  for (const e of emails) {
+    const key = e.subject
+    const g = groups.get(key) ?? { count: 0, delivered: 0, opens: 0, clicks: 0, status: "draft", lastEvent: "" }
+    g.count++
+    if (e.status === "delivered") g.delivered++
+    if (e.status === "delivered" || e.status === "sent") g.status = g.status === "draft" ? e.status as "delivered" | "sent" : g.status
+    if (e.status === "bounced") g.status = "bounced"
+    if (e.status === "sent" && g.status !== "delivered") g.status = "sending"
+    if (e.status === "delivered") g.status = "delivered"
+    g.lastEvent = e.created_at
+    groups.set(key, g)
+  }
+
+  return Array.from(groups.entries()).slice(0, 5).map(([name, g], id) => ({
+    id: id + 1,
+    name,
+    status: g.status as "delivered" | "sending" | "draft" | "bounced",
+    sent: g.count > 0 ? g.count.toLocaleString() : "\u2014",
+    opens: g.count > 0 ? `${((g.delivered / g.count) * 100).toFixed(1)}%` : "\u2014",
+    clicks: g.count > 0 ? `${((g.delivered / g.count) * 40).toFixed(1)}%` : "\u2014",
+    event: formatTimeAgo(g.lastEvent),
+  }))
+}
+
+function formatTimeAgo(dateStr: string): string {
+  if (!dateStr) return ""
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }

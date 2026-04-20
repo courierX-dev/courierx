@@ -5,6 +5,7 @@ import { VolumeChart } from "@/components/dashboard/volume-chart"
 import { PageShell } from "@/components/dashboard/page-shell"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { InlineError } from "@/components/dashboard/inline-error"
+import { AnimatedNumber } from "@/components/dashboard/animated-number"
 import { DotIndicator } from "@/components/ui/dot-indicator"
 import { cn } from "@/lib/utils"
 import { useDashboardMetrics } from "@/hooks/use-dashboard"
@@ -60,7 +61,7 @@ export default function AnalyticsPage() {
           <div key={s.label} className={cn("rounded-lg border border-border bg-card p-3", isLoading && "animate-pulse")}>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</p>
             <p className="mt-1 text-xl font-bold font-mono tabular-nums">
-              {isLoading ? <span className="invisible">0</span> : isError ? "—" : s.value}
+              {isLoading ? <span className="invisible">0</span> : isError ? "—" : <AnimatedNumber value={s.value} />}
             </p>
           </div>
         ))}
@@ -183,7 +184,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
             <span>97.0%</span>
-            <span>{avgDeliveryRate}% avg</span>
+            <span><AnimatedNumber value={`${avgDeliveryRate}%`} /> avg</span>
             <span>100%</span>
           </div>
         </div>
