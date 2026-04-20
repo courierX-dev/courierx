@@ -27,11 +27,13 @@ Rails.application.routes.draw do
   namespace :api, defaults: { format: :json } do
     namespace :v1 do
       # ── Auth ──
-      post  "auth/register", to: "auth#register"
-      post  "auth/login",   to: "auth#login"
-      get   "auth/me",      to: "auth#me"
-      patch "auth/me",      to: "auth#update"
-      delete "auth/me",     to: "auth#destroy"
+      post  "auth/register",  to: "auth#register"
+      post  "auth/login",     to: "auth#login"
+      get   "auth/me",        to: "auth#me"
+      patch "auth/me",        to: "auth#update"
+      delete "auth/me",       to: "auth#destroy"
+      get   "auth/readiness", to: "auth#readiness"
+      post  "auth/activate",  to: "auth#activate"
 
       # ── Waitlist (public, no auth) ──
       post "waitlist",        to: "waitlist#create"

@@ -6,7 +6,7 @@ module Api
       # No auth required for register/login
       skip_before_action :verify_authenticity_token, raise: false
 
-      before_action :authenticate_for_me, only: [:me, :update, :destroy]
+      before_action :authenticate_for_me, only: [:me, :update, :destroy, :readiness, :activate]
 
       # POST /api/v1/auth/register
       def register
@@ -55,6 +55,35 @@ module Api
         head :no_content
       end
 
+      # GET /api/v1/auth/readiness
+      # Reports whether the tenant has the prerequisites to leave demo mode:
+      # at least one verified domain, one active BYOK provider connection,
+      # and a default routing rule wired to that connection.
+      def readiness
+        render json: readiness_payload(@current_tenant)
+      end
+
+      # POST /api/v1/auth/activate
+      # Flips tenant.mode from "demo" to "byok" once prerequisites are met.
+      # Rejects if anything is missing — clients should call /readiness first.
+      def activate
+        readiness = readiness_payload(@current_tenant)
+
+        if @current_tenant.mode == "byok"
+          return render json: { tenant: tenant_json(@current_tenant), readiness: readiness }
+        end
+
+        unless readiness[:ready]
+          return render json: {
+            error:     "Cannot activate: prerequisites not met",
+            readiness: readiness
+          }, status: :unprocessable_entity
+        end
+
+        @current_tenant.update!(mode: "byok")
+        render json: { tenant: tenant_json(@current_tenant), readiness: readiness }
+      end
+
       private
 
       def tenant_params
@@ -77,6 +106,22 @@ module Api
           plan_id: tenant.plan_id,
           settings: tenant.settings,
           created_at: tenant.created_at
+        }
+      end
+
+      def readiness_payload(tenant)
+        verified_domain   = tenant.domains.where(status: "verified").exists?
+        active_provider   = tenant.provider_connections.where(status: "active").exists?
+        default_rule      = tenant.routing_rules.where(is_default: true).exists?
+
+        {
+          ready: verified_domain && active_provider && default_rule,
+          mode:  tenant.mode,
+          checks: {
+            verified_domain:        verified_domain,
+            active_provider:        active_provider,
+            default_routing_rule:   default_rule
+          }
         }
       end
 

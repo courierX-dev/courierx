@@ -8,11 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PageShell } from "@/components/dashboard/page-shell"
 import { toast } from "sonner"
-import api from "@/services/api"
+import { useSendEmail } from "@/hooks/use-emails"
 
 export default function NewCampaignPage() {
   const router = useRouter()
-  const [sending, setSending] = useState(false)
+  const sendEmail = useSendEmail()
   const [form, setForm] = useState({
     to: "",
     from: "",
@@ -28,9 +28,8 @@ export default function NewCampaignPage() {
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
-    setSending(true)
     try {
-      await api.post("/api/v1/emails", {
+      await sendEmail.mutateAsync({
         to: form.to,
         from: form.from || undefined,
         subject: form.subject,
@@ -42,8 +41,6 @@ export default function NewCampaignPage() {
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { error?: string } } }
       toast.error(apiErr.response?.data?.error ?? "Failed to send email")
-    } finally {
-      setSending(false)
     }
   }
 
@@ -151,8 +148,8 @@ export default function NewCampaignPage() {
 
         {/* Actions */}
         <div className="flex items-center gap-3 pt-2">
-          <Button type="submit" size="sm" className="gap-1.5" disabled={sending}>
-            {sending ? (
+          <Button type="submit" size="sm" className="gap-1.5" disabled={sendEmail.isPending}>
+            {sendEmail.isPending ? (
               "Sending..."
             ) : (
               <>
@@ -166,7 +163,7 @@ export default function NewCampaignPage() {
             variant="ghost"
             size="sm"
             onClick={() => router.back()}
-            disabled={sending}
+            disabled={sendEmail.isPending}
           >
             Cancel
           </Button>

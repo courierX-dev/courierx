@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { TopBar } from "@/components/layout/top-bar"
 import { ProjectSidebar } from "@/components/layout/project-sidebar"
 import { Toaster } from "@/components/ui/sonner"
+import { DashboardPrefetch } from "@/components/dashboard/dashboard-prefetch"
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -14,7 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
         <main className="flex-1 overflow-y-auto bg-background p-6" style={{ scrollbarGutter: "stable" }}>
-          {children}
+          <DashboardPrefetch>{children}</DashboardPrefetch>
         </main>
       </div>
       <Toaster position="bottom-right" />

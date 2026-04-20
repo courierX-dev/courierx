@@ -35,10 +35,15 @@ class EmailDispatchService
       return { success: true, email: existing, idempotent: true } if existing
     end
 
-    # 2. Verify from_email belongs to a verified tenant domain
-    from_domain = @params[:from_email]&.split("@")&.last&.downcase
-    unless @tenant.domains.where(status: "verified").exists?(["LOWER(domain) = ?", from_domain])
-      return { success: false, error: "from_email domain '#{from_domain}' is not a verified domain on this account" }
+    # 2. Verify from_email belongs to a verified tenant domain.
+    #    Demo-mode tenants skip this gate — they send through the mock provider
+    #    in the Go engine so new users can exercise the send flow immediately
+    #    after signup, before any DNS setup.
+    unless @tenant.mode == "demo"
+      from_domain = @params[:from_email]&.split("@")&.last&.downcase
+      unless @tenant.domains.where(status: "verified").exists?(["LOWER(domain) = ?", from_domain])
+        return { success: false, error: "from_email domain '#{from_domain}' is not a verified domain on this account" }
+      end
     end
 
     # 3. Check suppression list

@@ -48,9 +48,13 @@ class OutboxProcessorJob
     payload[:replyTo]        = email.reply_to                   if email.reply_to.present?
     payload[:idempotencyKey] = event.payload["idempotency_key"] if event.payload["idempotency_key"].present?
 
-    # Include per-tenant BYOK provider chain if configured
-    routes = build_provider_routes(tenant, email)
-    payload[:providers] = routes if routes.any?
+    # Include per-tenant BYOK provider chain if configured.
+    # Demo-mode tenants skip BYOK injection — Go falls back to its global
+    # router, which uses the mock provider when no real ENV providers are set.
+    unless tenant.mode == "demo"
+      routes = build_provider_routes(tenant, email)
+      payload[:providers] = routes if routes.any?
+    end
 
     # SECURITY: Do not enable Faraday body logging on this connection — the
     # request payload contains per-tenant provider credentials in plaintext.

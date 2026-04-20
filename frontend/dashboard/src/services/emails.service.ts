@@ -23,6 +23,14 @@ export interface ListEmailsParams {
   to?: string
 }
 
+export interface SendEmailParams {
+  to: string
+  from?: string
+  subject: string
+  html_body?: string
+  text_body?: string
+}
+
 export const emailsService = {
   async list(params: ListEmailsParams = {}): Promise<EmailListItem[]> {
     const { data } = await api.get<EmailListItem[]>("/api/v1/emails", { params })
@@ -31,6 +39,11 @@ export const emailsService = {
 
   async get(id: string): Promise<EmailListItem> {
     const { data } = await api.get<EmailListItem>(`/api/v1/emails/${id}`)
+    return data
+  },
+
+  async send(params: SendEmailParams): Promise<EmailListItem> {
+    const { data } = await api.post<EmailListItem>("/api/v1/emails", params)
     return data
   },
 }

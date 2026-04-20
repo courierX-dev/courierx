@@ -17,6 +17,7 @@ module Api
       def create
         domain = current_tenant.domains.build(domain_params)
         if domain.save
+          DomainPropagationJob.perform_async(domain.id)
           render json: domain_json(domain), status: :created
         else
           render json: { errors: domain.errors.full_messages }, status: :unprocessable_entity
@@ -57,11 +58,41 @@ module Api
       end
 
       def domain_json(d)
+        dpvs = d.domain_provider_verifications.to_a
+
+        # CourierX ownership record — proves the domain belongs to this tenant
+        ownership_record = {
+          type:  "TXT",
+          name:  d.domain,
+          value: "courierx-verify=#{d.verification_token}",
+          ttl:   3600
+        }
+
+        # Merged DNS bundle: ownership + every provider's required records,
+        # deduplicated on (type, name, value).
+        all_records = [ownership_record] + dpvs.flat_map { |dpv| dpv.records.map(&:symbolize_keys) }
+        unified = all_records.uniq { |r| [r[:type], r[:name], r[:value]] }
+
         {
-          id: d.id, domain: d.domain, status: d.status,
-          verification_token: d.verification_token, verified_at: d.verified_at,
-          spf_record: d.spf_record, dkim_selector: d.dkim_selector,
-          created_at: d.created_at
+          id:                 d.id,
+          domain:             d.domain,
+          status:             d.status,
+          verification_token: d.verification_token,
+          verified_at:        d.verified_at,
+          spf_record:         d.spf_record,
+          dkim_selector:      d.dkim_selector,
+          created_at:         d.created_at,
+          dns_records:        unified,
+          providers:          dpvs.map { |dpv|
+            {
+              provider:           dpv.provider,
+              status:             dpv.status,
+              verified_at:        dpv.verified_at,
+              last_checked_at:    dpv.last_checked_at,
+              error:              dpv.error,
+              external_domain_id: dpv.external_domain_id
+            }
+          }
         }
       end
     end
