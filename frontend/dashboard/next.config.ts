@@ -13,5 +13,4 @@ export default withSentryConfig(nextConfig, {
   widenClientFileUpload: true,
   disableLogger: true,
   automaticVercelMonitors: true,
-  tunnelRoute: "/monitoring",
 });
