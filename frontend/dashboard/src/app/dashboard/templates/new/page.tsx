@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Save, Sparkles, Eye, Loader2 } from "lucide-react"
 import Link from "next/link"
@@ -19,6 +19,14 @@ import { useCreateTemplate, useGenerateTemplate } from "@/hooks/use-templates"
 import { toast } from "sonner"
 
 export default function NewTemplatePage() {
+  return (
+    <Suspense fallback={null}>
+      <NewTemplatePageInner />
+    </Suspense>
+  )
+}
+
+function NewTemplatePageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isAiMode = searchParams.get("mode") === "ai"

@@ -6,6 +6,12 @@ class Rack::Attack
     url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0")
   )
 
+  # Behind Cloudflare, Rack::Attack.client_ip(req) would resolve to a CF edge address — banning one
+  # user would 403 everyone sharing that edge. Prefer the true client IP.
+  def self.client_ip(req)
+    req.env["HTTP_CF_CONNECTING_IP"].presence || Rack::Attack.client_ip(req)
+  end
+
   ### Safelist ###
 
   # Health checks never rate-limited
@@ -17,7 +23,7 @@ class Rack::Attack
 
   # Block IPs that hammer auth with bad credentials (track via throttle fail2ban)
   blocklist("block-auth-abusers") do |req|
-    Rack::Attack::Allow2Ban.filter(req.ip, maxretry: 20, findtime: 300, bantime: 1800) do
+    Rack::Attack::Allow2Ban.filter(Rack::Attack.client_ip(req), maxretry: 20, findtime: 300, bantime: 1800) do
       req.path.start_with?("/api/v1/auth") && req.post?
     end
   end
@@ -26,13 +32,13 @@ class Rack::Attack
 
   # General API: 60 req/min per IP — baseline protection
   throttle("req/ip", limit: 60, period: 60) do |req|
-    req.ip if req.path.start_with?("/api/")
+    Rack::Attack.client_ip(req) if req.path.start_with?("/api/")
   end
 
   # Email sending: STRICTER than general (20/min per IP, 200/min per authenticated tenant)
   # NOTE: This was previously 120/min — that was backwards. Email is the highest-abuse vector.
   throttle("emails/ip", limit: 20, period: 60) do |req|
-    req.ip if req.path == "/api/v1/emails" && req.post?
+    Rack::Attack.client_ip(req) if req.path == "/api/v1/emails" && req.post?
   end
 
   # Per-tenant email throttle via Bearer token — keyed on the first 16 chars of the token
@@ -46,7 +52,7 @@ class Rack::Attack
 
   # Bulk send endpoint: tighter still — 5/min per IP, 30/min per tenant
   throttle("bulk-send/ip", limit: 5, period: 60) do |req|
-    req.ip if req.path == "/api/v1/emails/bulk" && req.post?
+    Rack::Attack.client_ip(req) if req.path == "/api/v1/emails/bulk" && req.post?
   end
 
   throttle("bulk-send/tenant", limit: 30, period: 60) do |req|
@@ -58,22 +64,22 @@ class Rack::Attack
 
   # Waitlist: 5/min per IP
   throttle("waitlist/ip", limit: 5, period: 60) do |req|
-    req.ip if req.path.start_with?("/api/v1/waitlist")
+    Rack::Attack.client_ip(req) if req.path.start_with?("/api/v1/waitlist")
   end
 
   # Auth endpoints: 10/min per IP (brute-force protection on login/register)
   throttle("auth/ip", limit: 10, period: 60) do |req|
-    req.ip if req.path.start_with?("/api/v1/auth") && req.post?
+    Rack::Attack.client_ip(req) if req.path.start_with?("/api/v1/auth") && req.post?
   end
 
   # Admin endpoints: 30/min per IP (stricter because high privilege)
   throttle("admin/ip", limit: 30, period: 60) do |req|
-    req.ip if req.path.start_with?("/api/v1/admin")
+    Rack::Attack.client_ip(req) if req.path.start_with?("/api/v1/admin")
   end
 
   # Provider webhook endpoints: 300/min per IP (SNS/Mailgun/SendGrid may burst)
   throttle("webhooks-inbound/ip", limit: 300, period: 60) do |req|
-    req.ip if req.path.start_with?("/api/v1/webhooks")
+    Rack::Attack.client_ip(req) if req.path.start_with?("/api/v1/webhooks")
   end
 
   ### Logging ###
@@ -82,14 +88,14 @@ class Rack::Attack
     req = payload[:request]
     Rails.logger.warn(
       "[Rack::Attack] Throttled: rule=#{req.env['rack.attack.matched']} " \
-      "ip=#{req.ip} path=#{req.path} ua=#{req.user_agent.to_s.truncate(80)}"
+      "ip=#{Rack::Attack.client_ip(req)} path=#{req.path} ua=#{req.user_agent.to_s.truncate(80)}"
     )
   end
 
   ActiveSupport::Notifications.subscribe("blocklist.rack_attack") do |_name, _start, _finish, _request_id, payload|
     req = payload[:request]
     Rails.logger.warn(
-      "[Rack::Attack] Blocked: rule=#{req.env['rack.attack.matched']} ip=#{req.ip} path=#{req.path}"
+      "[Rack::Attack] Blocked: rule=#{req.env['rack.attack.matched']} ip=#{Rack::Attack.client_ip(req)} path=#{req.path}"
     )
   end
 
