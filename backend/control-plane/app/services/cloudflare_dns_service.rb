@@ -25,7 +25,7 @@ class CloudflareDnsService
 
       create_dns_record(
         type:    "TXT",
-        name:    domain.domain,
+        name:    "_courierx-verification.#{domain.domain}",
         content: domain.verification_token,
         comment: "CourierX domain verification"
       )
@@ -94,7 +94,7 @@ class CloudflareDnsService
 
     # Verifies a domain by checking if the TXT record exists in Cloudflare
     def verify_domain(domain)
-      records = list_dns_records(domain.domain)
+      records = list_dns_records("_courierx-verification.#{domain.domain}")
       records.any? { |r| r["content"]&.include?(domain.verification_token) }
     end
 

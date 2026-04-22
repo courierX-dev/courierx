@@ -24,10 +24,11 @@ class DomainVerificationJob
     end
 
     # 2. Check if verification token is resolvable
+    verification_host = "_courierx-verification.#{domain.domain}"
     token_found = if CloudflareDnsService.configured?
                     CloudflareDnsService.verify_domain(domain)
                   else
-                    check_txt_via_resolv(domain.domain, domain.verification_token, resolver)
+                    check_txt_via_resolv(verification_host, domain.verification_token, resolver)
                   end
 
     if token_found
