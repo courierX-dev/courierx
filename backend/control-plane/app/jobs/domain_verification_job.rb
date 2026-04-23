@@ -3,27 +3,32 @@
 # DomainVerificationJob
 #
 # Performs DNS TXT record lookup to verify domain ownership.
-# Uses Cloudflare API if configured, falls back to Ruby Resolv.
+# Uses Cloudflare API if configured, falls back to Ruby Resolv pointed at
+# public resolvers (1.1.1.1, 8.8.8.8) to avoid the system resolver's stale
+# cache slowing first-time verification.
 #
+# Self-reschedules with exponential backoff while the domain is younger than
+# 48 hours so the user does not have to keep clicking "Verify".
+
 class DomainVerificationJob
   include Sidekiq::Job
 
   sidekiq_options queue: :default, retry: 3
 
-  def perform(domain_id)
+  PUBLIC_RESOLVERS = ["1.1.1.1", "1.0.0.1", "8.8.8.8"].freeze
+  BACKOFF_SCHEDULE = [15, 30, 60, 120, 300, 600, 1800].freeze
+
+  def perform(domain_id, attempt = 0)
     domain = Domain.find(domain_id)
     return if domain.status == "verified"
 
-    # Share a single resolver across all DNS checks to avoid opening three
-    # separate UDP socket pools for one job run.
-    resolver = Resolv::DNS.new
+    resolver = Resolv::DNS.new(nameserver: PUBLIC_RESOLVERS)
+    resolver.timeouts = [3, 5]
 
-    # 1. If Cloudflare is configured, push DNS records first
     if CloudflareDnsService.configured? && domain.created_at > 5.minutes.ago
       push_cloudflare_records(domain)
     end
 
-    # 2. Check if verification token is resolvable
     verification_host = "_courierx-verification.#{domain.domain}"
     token_found = if CloudflareDnsService.configured?
                     CloudflareDnsService.verify_domain(domain)
@@ -35,17 +40,18 @@ class DomainVerificationJob
       domain.update!(status: "verified", verified_at: Time.current)
       check_spf(domain, resolver)
       check_dkim(domain, resolver)
-
-      Sentry.capture_message("Domain verified: #{domain.domain}",
-                             level: :info) if defined?(Sentry)
-    else
-      if domain.created_at < 48.hours.ago
-        domain.update!(status: "failed")
-        Sentry.capture_message("Domain verification failed: #{domain.domain}",
-                               level: :warning) if defined?(Sentry)
-      end
-      # If younger than 48h, leave as pending — DNS propagation
+      Sentry.capture_message("Domain verified: #{domain.domain}", level: :info) if defined?(Sentry)
+      return
     end
+
+    if domain.created_at < 48.hours.ago
+      domain.update!(status: "failed")
+      Sentry.capture_message("Domain verification failed: #{domain.domain}", level: :warning) if defined?(Sentry)
+      return
+    end
+
+    delay = BACKOFF_SCHEDULE[attempt] || BACKOFF_SCHEDULE.last
+    self.class.perform_in(delay.seconds, domain_id, attempt + 1)
   ensure
     resolver&.close
   end

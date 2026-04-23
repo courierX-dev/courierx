@@ -40,10 +40,22 @@ module Api
 
       # POST /api/v1/emails
       def create
-        result = EmailDispatchService.call(
-          tenant: current_tenant,
-          params: email_params
-        )
+        dispatch_params = normalized_email_params
+
+        missing = %i[to_email from_email subject].select { |k| dispatch_params[k].to_s.strip.empty? }
+        if missing.any?
+          return render json: { error: "Missing required fields: #{missing.join(', ')}" },
+                        status: :unprocessable_entity
+        end
+
+        if dispatch_params[:html_body].to_s.strip.empty? &&
+           dispatch_params[:text_body].to_s.strip.empty? &&
+           dispatch_params[:template_id].blank?
+          return render json: { error: "Provide html_body, text_body, or template_id" },
+                        status: :unprocessable_entity
+        end
+
+        result = EmailDispatchService.call(tenant: current_tenant, params: dispatch_params)
 
         if result[:success]
           render json: { email: email_json(result[:email]) }, status: :accepted
@@ -55,9 +67,21 @@ module Api
       private
 
       def email_params
-        params.permit(:from_email, :from_name, :to_email, :to_name, :reply_to,
-                       :subject, :html_body, :text_body, :template_id,
+        params.permit(:from_email, :from, :from_name, :to_email, :to, :to_name, :reply_to,
+                       :subject, :html_body, :html, :text_body, :text, :template_id,
                        tags: [], metadata: {}, variables: {})
+      end
+
+      # Accept the widely-used short field names (to, from, html, text) as aliases
+      # for the canonical ones so the API matches what developers expect from
+      # SendGrid/Resend/Postmark/Mailgun.
+      def normalized_email_params
+        p = email_params.to_h.symbolize_keys
+        p[:to_email]  ||= p.delete(:to)
+        p[:from_email] ||= p.delete(:from)
+        p[:html_body]  ||= p.delete(:html)
+        p[:text_body]  ||= p.delete(:text)
+        p
       end
 
       def email_json(email)

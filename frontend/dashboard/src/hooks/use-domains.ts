@@ -6,6 +6,12 @@ export function useDomains() {
     queryKey: ["domains"],
     queryFn: () => domainsService.list(),
     staleTime: 10 * 60 * 1000,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      const anyPending = data?.some((d) => d.status === "pending_verification" || d.status === "pending")
+      return anyPending ? 5000 : false
+    },
+    refetchIntervalInBackground: false,
   })
 }
 

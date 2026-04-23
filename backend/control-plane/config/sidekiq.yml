@@ -1,0 +1,6 @@
+:concurrency: 10
+:queues:
+  - [critical, 4]
+  - [default, 2]
+  - [webhooks, 2]
+  - [low, 1]

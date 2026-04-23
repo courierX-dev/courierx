@@ -35,6 +35,17 @@ class Tenant < ApplicationRecord
   # ── Callbacks ──
   before_validation :generate_slug, on: :create
 
+  # Promote demo → byok if all prerequisites are now met. Safe to call from
+  # callbacks on Domain / ProviderConnection / RoutingRule after save.
+  def maybe_auto_activate!
+    return unless mode == "demo"
+    return unless domains.where(status: "verified").exists?
+    return unless provider_connections.where(status: "active").exists?
+    return unless routing_rules.where(is_default: true).exists?
+
+    update!(mode: "byok")
+  end
+
   private
 
   def generate_slug

@@ -29,6 +29,7 @@ class ProviderConnection < ApplicationRecord
   attr_writer :api_key, :secret
 
   before_save :encrypt_credentials
+  after_save  :auto_activate_tenant, if: -> { saved_change_to_status? || previously_new_record? }
 
   def api_key
     @api_key ||= decrypt_field(encrypted_api_key)
@@ -45,6 +46,10 @@ class ProviderConnection < ApplicationRecord
   end
 
   private
+
+  def auto_activate_tenant
+    tenant&.maybe_auto_activate! if status == "active"
+  end
 
   def encrypt_credentials
     self.encrypted_api_key = encryptor.encrypt_and_sign(@api_key) if @api_key.present?

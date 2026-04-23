@@ -63,7 +63,7 @@ module Api
         # CourierX ownership record — proves the domain belongs to this tenant
         ownership_record = {
           type:  "TXT",
-          name:  d.domain,
+          name:  "_courierx-verification.#{d.domain}",
           value: "courierx-verify=#{d.verification_token}",
           ttl:   3600
         }

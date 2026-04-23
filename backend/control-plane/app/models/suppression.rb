@@ -10,6 +10,8 @@ class Suppression < ApplicationRecord
   scope :complaints, -> { where(reason: "complaint") }
 
   def self.suppressed?(tenant_id, email)
-    exists?(tenant_id: tenant_id, email: email.downcase.strip)
+    normalized = email.to_s.downcase.strip
+    return false if normalized.empty?
+    exists?(tenant_id: tenant_id, email: normalized)
   end
 end

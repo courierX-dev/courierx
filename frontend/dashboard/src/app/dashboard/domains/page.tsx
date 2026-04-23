@@ -52,14 +52,10 @@ export default function DomainsPage() {
   async function handleVerify(id: string, domain: string) {
     setVerifyingId(id)
     try {
-      const updated = await verifyMutation.mutateAsync(id)
-      if (updated.verified_at) {
-        toast.success("Domain verified", { description: domain })
-      } else {
-        toast.error("Verification failed", { description: "DNS records not found yet. Try again in a few minutes." })
-      }
+      await verifyMutation.mutateAsync(id)
+      toast.success("Checking DNS", { description: `We'll keep polling ${domain} in the background.` })
     } catch {
-      toast.error("Verification check failed")
+      toast.error("Could not start verification")
     } finally {
       setVerifyingId(null)
     }
@@ -143,8 +139,24 @@ export default function DomainsPage() {
                   <td className="px-4 py-3 font-mono text-sm">{d.domain}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <DotIndicator status={d.verified_at ? "active" : "inactive"} />
-                      <span className="text-xs">{d.verified_at ? "Verified" : "Unverified"}</span>
+                      <DotIndicator
+                        status={
+                          d.status === "verified"
+                            ? "active"
+                            : d.status === "failed"
+                              ? "inactive"
+                              : "pending"
+                        }
+                      />
+                      <span className="text-xs">
+                        {d.status === "verified"
+                          ? "Verified"
+                          : d.status === "failed"
+                            ? "Failed"
+                            : d.status === "pending_verification"
+                              ? "Checking…"
+                              : "Pending"}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground hidden md:table-cell">
