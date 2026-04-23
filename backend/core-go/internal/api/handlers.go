@@ -124,20 +124,26 @@ func (h *Handler) HealthCheck(c *fiber.Ctx) error {
 // Send handles a single email send with idempotency and template rendering.
 func (h *Handler) Send(c *fiber.Ctx) error {
 	requestID := middleware.GetRequestID(c)
+	slog.Info("received send request", "request_id", requestID, "from_ip", c.IP())
 
 	var req types.SendRequest
 	if err := c.BodyParser(&req); err != nil {
+		slog.Error("failed to parse request body", "request_id", requestID, "error", err)
 		return c.Status(fiber.StatusBadRequest).JSON(types.SendResponse{
 			Success: false, Error: "invalid request body: " + err.Error(),
 		})
 	}
 
+	slog.Info("parsed send request", "request_id", requestID, "from", req.From, "to", req.To, "subject", req.Subject)
+
 	if req.From == "" || req.To == "" || req.Subject == "" {
+		slog.Error("missing required fields", "request_id", requestID, "from", req.From, "to", req.To, "subject", req.Subject)
 		return c.Status(fiber.StatusBadRequest).JSON(types.SendResponse{
 			Success: false, Error: "from, to, and subject are required",
 		})
 	}
 	if req.HTML == "" && req.Text == "" {
+		slog.Error("missing email body", "request_id", requestID)
 		return c.Status(fiber.StatusBadRequest).JSON(types.SendResponse{
 			Success: false, Error: "html or text body is required",
 		})

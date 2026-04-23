@@ -15,14 +15,21 @@ class OutboxProcessorJob
   GO_SHARED_SECRET = ENV.fetch("GO_CORE_SECRET", "dev-secret")
 
   def perform(outbox_event_id)
+    Rails.logger.info "[OutboxProcessor] Starting job for outbox_event_id: #{outbox_event_id}"
+    
     # Atomic status transition — prevents double-processing when two Sidekiq
     # workers race on the same event (retry storms, duplicate enqueues).
     updated = OutboxEvent.where(id: outbox_event_id, status: "pending")
                          .update_all(status: "processing",
                                      attempt_count: Arel.sql("attempt_count + 1"))
-    return if updated.zero?
+    
+    if updated.zero?
+      Rails.logger.warn "[OutboxProcessor] No pending event found for ID #{outbox_event_id} - already processed?"
+      return
+    end
 
     event = OutboxEvent.find(outbox_event_id)
+    Rails.logger.info "[OutboxProcessor] Processing event #{event.id}, attempt #{event.attempt_count}"
 
     # Assign email before entering the rescue boundary so mark_failed! is
     # always reachable even if a later step raises.
@@ -58,6 +65,9 @@ class OutboxProcessorJob
 
     # SECURITY: Do not enable Faraday body logging on this connection — the
     # request payload contains per-tenant provider credentials in plaintext.
+    Rails.logger.info "[OutboxProcessor] Calling Go service at #{GO_ENGINE_URL}/v1/send"
+    Rails.logger.info "[OutboxProcessor] Payload keys: #{payload.keys.join(', ')}"
+    
     conn = Faraday.new(GO_ENGINE_URL)
     response = conn.post("/v1/send") do |req|
       req.headers["Content-Type"]      = "application/json"
@@ -65,7 +75,10 @@ class OutboxProcessorJob
       req.body = payload.to_json
     end
 
+    Rails.logger.info "[OutboxProcessor] Go service responded with status: #{response.status}"
+    
     if response.success?
+      Rails.logger.info "[OutboxProcessor] Success! Response body: #{response.body}"
       body = JSON.parse(response.body)
       # Go returns { "messageId": "...", "provider": "sendgrid", ... }
       provider_conn = tenant.provider_connections.active.find_by(provider: body["provider"])
@@ -75,12 +88,20 @@ class OutboxProcessorJob
       )
       event.complete!
     else
+      Rails.logger.error "[OutboxProcessor] Go service error! Status: #{response.status}, Body: #{response.body}"
       body      = begin JSON.parse(response.body) rescue {} end
       error_msg = body["error"].presence || "Go engine returned #{response.status}: #{response.body}"
       email.mark_failed!(error: error_msg)
       event.fail!(error_msg)
     end
   rescue Faraday::Error => e
+    Rails.logger.error "[OutboxProcessor] Faraday connection error: #{e.class} - #{e.message}"
+    Rails.logger.error "[OutboxProcessor] Attempted URL: #{GO_ENGINE_URL}/v1/send"
+    event&.fail!(e.message)
+    email&.mark_failed!(error: e.message)
+  rescue => e
+    Rails.logger.error "[OutboxProcessor] Unexpected error: #{e.class} - #{e.message}"
+    Rails.logger.error e.backtrace.join("\n")
     event&.fail!(e.message)
     email&.mark_failed!(error: e.message)
   end
