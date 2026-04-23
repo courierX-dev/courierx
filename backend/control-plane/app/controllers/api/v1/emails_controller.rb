@@ -24,6 +24,10 @@ module Api
       def show
         email = current_tenant.emails.find(params[:id])
         render json: email_json(email).merge(
+          html_body: email.html_body,
+          text_body: email.text_body,
+          reply_to:  email.reply_to,
+          metadata:  email.metadata,
           events: email.email_events.order(occurred_at: :desc).map { |ev|
             {
               id: ev.id,

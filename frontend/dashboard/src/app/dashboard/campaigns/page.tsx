@@ -9,6 +9,8 @@ import { InlineError } from "@/components/dashboard/inline-error"
 import { AnimatedNumber } from "@/components/dashboard/animated-number"
 import { cn } from "@/lib/utils"
 import { useEmails } from "@/hooks/use-emails"
+import { CampaignDetailDialog } from "./campaign-detail-dialog"
+import type { CampaignGroup } from "./types"
 
 const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
   delivered: { dot: "bg-success", text: "text-success" },
@@ -20,21 +22,10 @@ const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
   draft:     { dot: "bg-muted-foreground", text: "text-muted-foreground" },
 }
 
-interface CampaignGroup {
-  subject: string
-  totalSent: number
-  delivered: number
-  bounced: number
-  failed: number
-  openRate: number
-  status: string
-  lastActivity: string
-  recipients: string[]
-  tags: string[]
-}
 
 export default function CampaignsPage() {
   const [search, setSearch] = useState("")
+  const [openCampaign, setOpenCampaign] = useState<CampaignGroup | null>(null)
   const { data: emails, isLoading, isError, refetch } = useEmails({ per_page: 200 })
 
   const campaigns = useMemo(() => {
@@ -55,6 +46,12 @@ export default function CampaignsPage() {
         lastActivity: "",
         recipients: [],
         tags: [],
+        sampleEmailId: email.id,
+        fromEmail: email.from_email,
+      }
+
+      if (!existing.lastActivity || email.created_at > existing.lastActivity) {
+        existing.sampleEmailId = email.id
       }
 
       existing.totalSent++
@@ -202,8 +199,9 @@ export default function CampaignsPage() {
                 return (
                   <tr
                     key={c.subject}
+                    onClick={() => setOpenCampaign(c)}
                     className={cn(
-                      "hover:bg-muted/20 transition-colors",
+                      "hover:bg-muted/20 transition-colors cursor-pointer",
                       i < filtered.length - 1 && "border-b border-border/50",
                     )}
                   >
@@ -280,6 +278,11 @@ export default function CampaignsPage() {
           </tbody>
         </table>
       </div>
+
+      <CampaignDetailDialog
+        campaign={openCampaign}
+        onOpenChange={(open) => !open && setOpenCampaign(null)}
+      />
     </PageShell>
   )
 }

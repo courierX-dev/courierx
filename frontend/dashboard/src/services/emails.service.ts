@@ -14,6 +14,24 @@ export interface EmailListItem {
   created_at: string
 }
 
+export interface EmailEvent {
+  id: string
+  event_type: string
+  occurred_at: string
+  provider: string | null
+  bounce_type: string | null
+  bounce_code: string | null
+  link_url: string | null
+}
+
+export interface EmailDetail extends EmailListItem {
+  html_body: string | null
+  text_body: string | null
+  reply_to: string | null
+  metadata: Record<string, unknown> | null
+  events: EmailEvent[]
+}
+
 export interface ListEmailsParams {
   page?: number
   per_page?: number
@@ -37,8 +55,8 @@ export const emailsService = {
     return data
   },
 
-  async get(id: string): Promise<EmailListItem> {
-    const { data } = await api.get<EmailListItem>(`/api/v1/emails/${id}`)
+  async get(id: string): Promise<EmailDetail> {
+    const { data } = await api.get<EmailDetail>(`/api/v1/emails/${id}`)
     return data
   },
 

@@ -10,12 +10,4 @@ class RoutingRule < ApplicationRecord
 
   scope :active,       -> { where(is_active: true) }
   scope :default_rule, -> { where(is_default: true) }
-
-  after_save :auto_activate_tenant, if: -> { saved_change_to_is_default? || previously_new_record? }
-
-  private
-
-  def auto_activate_tenant
-    tenant&.maybe_auto_activate! if is_default
-  end
 end

@@ -10,17 +10,12 @@ class Domain < ApplicationRecord
   scope :pending,  -> { where(status: "pending") }
 
   before_create :generate_verification_token
-  after_save    :auto_activate_tenant, if: :saved_change_to_status?
 
   def verify!
     update!(status: "verified", verified_at: Time.current)
   end
 
   private
-
-  def auto_activate_tenant
-    tenant&.maybe_auto_activate! if status == "verified"
-  end
 
   def generate_verification_token
     self.verification_token ||= SecureRandom.hex(32)
