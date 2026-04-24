@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_23_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_24_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -235,6 +235,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_23_000000) do
   create_table "outbox_events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.integer "attempt_count", default: 0, null: false
     t.datetime "created_at", null: false
+    t.string "destination", default: "go_core", null: false
     t.string "event_type", null: false
     t.text "last_error"
     t.integer "max_attempts", default: 5, null: false
@@ -244,6 +245,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_23_000000) do
     t.string "status", default: "pending", null: false
     t.datetime "updated_at", null: false
     t.index ["created_at"], name: "index_outbox_events_on_created_at"
+    t.index ["destination", "status", "process_after"], name: "index_outbox_events_on_destination_status_and_process_after"
     t.index ["status", "process_after"], name: "idx_outbox_pickup"
   end
 
@@ -330,9 +332,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_23_000000) do
     t.datetime "created_at", null: false
     t.datetime "current_period_ends_at"
     t.string "email", null: false
-    t.string "mode", default: "demo", null: false
+    t.string "mode", default: "byok", null: false
     t.string "name", null: false
     t.string "password_digest"
+    t.string "plan_id"
     t.jsonb "settings", default: {}, null: false
     t.string "slug", null: false
     t.string "status", default: "active", null: false

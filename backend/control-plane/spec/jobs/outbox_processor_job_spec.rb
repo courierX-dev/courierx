@@ -76,29 +76,31 @@ RSpec.describe OutboxProcessorJob do
 
   # ── Failure paths ─────────────────────────────────────────────────────────
 
-  it "transitions email to failed on a 5xx response" do
+  it "leaves email in queued on a 5xx response (transient — retry)" do
     stub_request(:post, /v1\/send/).to_return(status: 503, body: "")
-    described_class.new.perform(outbox.id)
-    expect(email.reload.status).to eq("failed")
+    expect { described_class.new.perform(outbox.id) }.to raise_error(/Go engine 503/)
+    expect(email.reload.status).to eq("queued")
   end
 
   it "marks outbox event as pending (for retry) on 5xx" do
     stub_request(:post, /v1\/send/).to_return(status: 503, body: "")
-    described_class.new.perform(outbox.id)
+    expect { described_class.new.perform(outbox.id) }.to raise_error(/Go engine 503/)
     expect(outbox.reload.status).to eq("pending")
   end
 
-  it "marks outbox event as dead after max_attempts exceeded" do
-    stub_request(:post, /v1\/send/).to_return(status: 503, body: "")
-    outbox.update!(attempt_count: outbox.max_attempts)
+  it "marks email as failed and event as dead on a 4xx response (permanent rejection)" do
+    stub_request(:post, /v1\/send/).to_return(status: 400, body: '{"error":"invalid recipient"}')
     described_class.new.perform(outbox.id)
+    expect(email.reload.status).to eq("failed")
     expect(outbox.reload.status).to eq("dead")
   end
 
-  it "handles Faraday connection errors gracefully" do
+  it "re-raises Faraday connection errors so Sidekiq retries" do
     stub_request(:post, /v1\/send/).to_raise(Faraday::ConnectionFailed.new("ECONNREFUSED"))
-    expect { described_class.new.perform(outbox.id) }.not_to raise_error
-    expect(email.reload.status).to eq("failed")
+    expect { described_class.new.perform(outbox.id) }.to raise_error(Faraday::ConnectionFailed)
+    # Email stays queued — transient infra failure must not surface as a delivery failure.
+    expect(email.reload.status).to eq("queued")
+    expect(outbox.reload.status).to eq("pending")
   end
 
   # ── Idempotency ───────────────────────────────────────────────────────────
@@ -118,6 +120,7 @@ RSpec.describe OutboxProcessorJob do
   # ── BYOK provider routes ──────────────────────────────────────────────────
 
   context "when tenant has active provider connections via a routing rule" do
+    let(:tenant) { create(:tenant, mode: "byok") }
     let(:provider_conn) do
       create(:provider_connection, tenant: tenant, provider: "sendgrid")
     end

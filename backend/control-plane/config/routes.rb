@@ -39,6 +39,8 @@ Rails.application.routes.draw do
       post "webhooks/sendgrid", to: "provider_webhooks/sendgrid#create"
       post "webhooks/mailgun",  to: "provider_webhooks/mailgun#create"
       post "webhooks/ses",      to: "provider_webhooks/ses#create"
+      post "webhooks/resend",   to: "provider_webhooks/resend#create"
+      post "webhooks/postmark", to: "provider_webhooks/postmark#create"
 
       # ── Health check (public) ──
       get "health", to: "health#show"
