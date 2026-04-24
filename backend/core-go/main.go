@@ -104,7 +104,7 @@ func main() {
 		"db", dbPool != nil,
 	)
 
-	if err := app.Listen(":" + cfg.Port); err != nil {
+	if err := app.Listen("[::]:" + cfg.Port); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)
 	}
