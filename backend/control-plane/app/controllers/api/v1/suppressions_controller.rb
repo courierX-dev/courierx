@@ -7,7 +7,8 @@ module Api
         suppressions = current_tenant.suppressions.order(created_at: :desc)
         suppressions = suppressions.where(reason: params[:reason]) if params[:reason].present?
         render json: suppressions.limit(100).map { |s|
-          { id: s.id, email: s.email, reason: s.reason, note: s.note, created_at: s.created_at }
+          { id: s.id, email: s.email, reason: s.reason, note: s.note,
+            source_email_id: s.source_email_id, created_at: s.created_at }
         }
       end
 

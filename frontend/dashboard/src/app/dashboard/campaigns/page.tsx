@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Search, Mail } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { PageShell } from "@/components/dashboard/page-shell"
@@ -24,6 +25,8 @@ const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
 
 
 export default function CampaignsPage() {
+  const searchParams = useSearchParams()
+  const initialSubject = searchParams.get("subject") ?? ""
   const [search, setSearch] = useState("")
   const [openCampaign, setOpenCampaign] = useState<CampaignGroup | null>(null)
   const { data: emails, isLoading, isError, refetch } = useEmails({ per_page: 200 })
@@ -91,6 +94,12 @@ export default function CampaignsPage() {
       (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
     )
   }, [emails])
+
+  useEffect(() => {
+    if (!initialSubject || openCampaign) return
+    const match = campaigns.find((c) => c.subject === initialSubject)
+    if (match) setOpenCampaign(match)
+  }, [initialSubject, campaigns, openCampaign])
 
   const filtered = useMemo(() => {
     if (!search) return campaigns

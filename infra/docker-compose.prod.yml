@@ -54,8 +54,6 @@ services:
       GO_CORE_URL: ${GO_CORE_URL:-http://core-go:8080}
       GO_CORE_SECRET: ${GO_CORE_SECRET}
       FRONTEND_URL: ${FRONTEND_URL:-https://app.courierx.dev}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-1000}
       RATE_LIMIT_PERIOD: ${RATE_LIMIT_PERIOD:-3600}
@@ -140,7 +138,6 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       GO_CORE_URL: ${GO_CORE_URL:-http://core-go:8080}
       GO_CORE_SECRET: ${GO_CORE_SECRET}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
     depends_on:
       postgres:

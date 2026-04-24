@@ -19,6 +19,19 @@ export interface WebhookEndpoint {
   created_at: string
 }
 
+export interface WebhookDelivery {
+  id: string
+  success: boolean
+  response_status: number | null
+  response_body: string | null
+  attempt_count: number
+  delivered_at: string | null
+  next_retry_at: string | null
+  created_at: string
+  event_type: string | null
+  payload: Record<string, unknown>
+}
+
 export const webhooksService = {
   async list(): Promise<WebhookEndpoint[]> {
     const { data } = await api.get<WebhookEndpoint[]>("/api/v1/webhook_endpoints")
@@ -37,5 +50,14 @@ export const webhooksService = {
 
   async delete(id: string): Promise<void> {
     await api.delete(`/api/v1/webhook_endpoints/${id}`)
+  },
+
+  async deliveries(id: string): Promise<WebhookDelivery[]> {
+    const { data } = await api.get<WebhookDelivery[]>(`/api/v1/webhook_endpoints/${id}/deliveries`)
+    return data
+  },
+
+  async test(id: string): Promise<void> {
+    await api.post(`/api/v1/webhook_endpoints/${id}/test`)
   },
 }

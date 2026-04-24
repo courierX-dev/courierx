@@ -11,10 +11,6 @@ module Api
             tenants = tenants.where(status: params[:status])
           end
 
-          if params[:plan].present?
-            tenants = tenants.where(plan: params[:plan])
-          end
-
           render json: paginate(tenants)
         end
 
@@ -74,12 +70,11 @@ module Api
         private
 
         def tenant_params
-          # Super admins can update these critical fields
-          params.permit(:plan, :plan_email_limit, :status, :mode, :current_period_ends_at)
+          params.permit(:status, :mode, :current_period_ends_at)
         end
 
         def tenant_create_params
-          params.permit(:name, :email, :password, :mode, :plan)
+          params.permit(:name, :email, :password, :mode)
         end
       end
     end

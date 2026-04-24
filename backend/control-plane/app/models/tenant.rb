@@ -1,4 +1,6 @@
 class Tenant < ApplicationRecord
+  include PublishesCloudEvents
+
   has_secure_password
 
   # ── Associations ──
@@ -33,6 +35,8 @@ class Tenant < ApplicationRecord
 
   # ── Callbacks ──
   before_validation :generate_slug, on: :create
+  after_commit :publish_tenant_created_event, on: :create
+  after_commit :publish_tenant_updated_event, on: :update, if: :saved_change_to_cloud_relevant_attrs?
 
   # Promote demo → byok if all prerequisites are now met. Only called from
   # the explicit activation path (email-verification hook or admin action);
@@ -48,6 +52,24 @@ class Tenant < ApplicationRecord
   end
 
   private
+
+  CLOUD_RELEVANT_ATTRS = %w[name email status mode].freeze
+
+  def saved_change_to_cloud_relevant_attrs?
+    (saved_changes.keys & CLOUD_RELEVANT_ATTRS).any?
+  end
+
+  def cloud_projection
+    { id: id, name: name, email: email, status: status, mode: mode, created_at: created_at }
+  end
+
+  def publish_tenant_created_event
+    publish_cloud_event("tenant.created", cloud_projection)
+  end
+
+  def publish_tenant_updated_event
+    publish_cloud_event("tenant.updated", cloud_projection)
+  end
 
   def generate_slug
     return if self.slug.present?

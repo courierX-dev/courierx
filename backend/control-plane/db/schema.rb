@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_23_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -29,38 +29,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
     t.index ["key_hash"], name: "index_api_keys_on_key_hash", unique: true
     t.index ["tenant_id", "status"], name: "index_api_keys_on_tenant_id_and_status"
     t.index ["tenant_id"], name: "index_api_keys_on_tenant_id"
-  end
-
-  create_table "compliance_documents", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "compliance_profile_id", null: false
-    t.datetime "created_at", null: false
-    t.string "document_type", null: false
-    t.string "file_name", null: false
-    t.integer "file_size_bytes"
-    t.string "s3_key", null: false
-    t.datetime "updated_at", null: false
-    t.index ["compliance_profile_id"], name: "index_compliance_documents_on_compliance_profile_id"
-  end
-
-  create_table "compliance_profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.boolean "anti_spam_policy_accepted", default: false, null: false
-    t.datetime "anti_spam_policy_accepted_at"
-    t.string "business_type"
-    t.string "country"
-    t.datetime "created_at", null: false
-    t.integer "estimated_monthly_volume"
-    t.string "legal_name"
-    t.text "review_note"
-    t.datetime "reviewed_at"
-    t.string "reviewed_by"
-    t.string "sending_categories", default: [], array: true
-    t.string "status", default: "pending", null: false
-    t.datetime "submitted_at"
-    t.uuid "tenant_id", null: false
-    t.datetime "updated_at", null: false
-    t.text "use_case_description"
-    t.string "website"
-    t.index ["tenant_id"], name: "index_compliance_profiles_on_tenant_id", unique: true
   end
 
   create_table "domain_provider_verifications", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -192,22 +160,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
     t.index ["token"], name: "index_invitations_on_token", unique: true
   end
 
-  create_table "managed_sub_accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.integer "daily_limit"
-    t.string "dedicated_ips", default: [], array: true
-    t.string "encrypted_api_key", null: false
-    t.string "encrypted_api_key_iv", null: false
-    t.string "external_id", null: false
-    t.integer "monthly_limit"
-    t.string "provider", null: false
-    t.string "region"
-    t.string "shared_pool_id"
-    t.string "status", default: "active", null: false
-    t.datetime "updated_at", null: false
-    t.index ["provider", "external_id"], name: "index_managed_sub_accounts_on_provider_and_external_id", unique: true
-  end
-
   create_table "mcp_audit_logs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.float "confidence_score"
     t.datetime "created_at", default: -> { "now()" }, null: false
@@ -305,7 +257,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
     t.string "encrypted_secret"
     t.string "encrypted_secret_iv"
     t.datetime "last_health_check_at"
-    t.uuid "managed_sub_account_id"
     t.string "mode", default: "byok", null: false
     t.integer "priority", default: 1, null: false
     t.string "provider", null: false
@@ -317,7 +268,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
     t.uuid "tenant_id", null: false
     t.datetime "updated_at", null: false
     t.integer "weight", default: 100, null: false
-    t.index ["managed_sub_account_id"], name: "index_provider_connections_on_managed_sub_account_id"
     t.index ["tenant_id", "provider", "mode"], name: "index_provider_connections_on_tenant_id_and_provider_and_mode", unique: true
     t.index ["tenant_id", "status"], name: "index_provider_connections_on_tenant_id_and_status"
     t.index ["tenant_id"], name: "index_provider_connections_on_tenant_id"
@@ -377,24 +327,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
   end
 
   create_table "tenants", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "billing_customer_id"
-    t.string "billing_provider"
-    t.string "billing_subscription_id"
     t.datetime "created_at", null: false
     t.datetime "current_period_ends_at"
     t.string "email", null: false
     t.string "mode", default: "demo", null: false
     t.string "name", null: false
     t.string "password_digest"
-    t.string "plan", default: "free", null: false
-    t.integer "plan_email_limit", default: 100
-    t.string "plan_id"
     t.jsonb "settings", default: {}, null: false
     t.string "slug", null: false
     t.string "status", default: "active", null: false
     t.datetime "updated_at", null: false
-    t.index ["billing_customer_id"], name: "index_tenants_on_billing_customer_id", unique: true, where: "(billing_customer_id IS NOT NULL)"
-    t.index ["billing_subscription_id"], name: "index_tenants_on_billing_subscription_id", unique: true, where: "(billing_subscription_id IS NOT NULL)"
     t.index ["email"], name: "index_tenants_on_email", unique: true
     t.index ["slug"], name: "index_tenants_on_slug", unique: true
     t.index ["status"], name: "index_tenants_on_status"
@@ -428,27 +370,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
     t.datetime "updated_at", null: false
   end
 
-  create_table "waitlist_entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "company"
-    t.datetime "created_at", null: false
-    t.string "email", null: false
-    t.datetime "invited_at"
-    t.string "name"
-    t.integer "position", null: false
-    t.string "referral_code", null: false
-    t.string "referred_by"
-    t.string "status", default: "pending", null: false
-    t.uuid "tenant_id"
-    t.datetime "updated_at", null: false
-    t.string "use_case"
-    t.index ["email"], name: "index_waitlist_entries_on_email", unique: true
-    t.index ["position"], name: "index_waitlist_entries_on_position", unique: true
-    t.index ["referral_code"], name: "index_waitlist_entries_on_referral_code", unique: true
-    t.index ["referred_by"], name: "index_waitlist_entries_on_referred_by"
-    t.index ["status"], name: "index_waitlist_entries_on_status"
-    t.index ["tenant_id"], name: "index_waitlist_entries_on_tenant_id"
-  end
-
   create_table "webhook_deliveries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.integer "attempt_count", default: 1, null: false
     t.datetime "created_at", null: false
@@ -480,8 +401,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
   end
 
   add_foreign_key "api_keys", "tenants"
-  add_foreign_key "compliance_documents", "compliance_profiles"
-  add_foreign_key "compliance_profiles", "tenants"
   add_foreign_key "domain_provider_verifications", "domains"
   add_foreign_key "domains", "tenants"
   add_foreign_key "email_events", "emails"
@@ -492,7 +411,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
   add_foreign_key "mcp_connections", "tenants"
   add_foreign_key "memberships", "tenants"
   add_foreign_key "memberships", "users"
-  add_foreign_key "provider_connections", "managed_sub_accounts"
   add_foreign_key "provider_connections", "tenants"
   add_foreign_key "rate_limit_policies", "tenants"
   add_foreign_key "routing_rule_providers", "provider_connections"
@@ -500,7 +418,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_000002) do
   add_foreign_key "routing_rules", "tenants"
   add_foreign_key "suppressions", "tenants"
   add_foreign_key "usage_stats", "tenants"
-  add_foreign_key "waitlist_entries", "tenants"
   add_foreign_key "webhook_deliveries", "webhook_endpoints"
   add_foreign_key "webhook_endpoints", "tenants"
 end

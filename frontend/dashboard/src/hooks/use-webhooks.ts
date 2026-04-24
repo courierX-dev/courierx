@@ -34,3 +34,22 @@ export function useDeleteWebhook() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
   })
 }
+
+export function useWebhookDeliveries(id: string | null) {
+  return useQuery({
+    queryKey: ["webhooks", id, "deliveries"],
+    queryFn: () => webhooksService.deliveries(id!),
+    enabled: !!id,
+    refetchInterval: 5000,
+  })
+}
+
+export function useTestWebhook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => webhooksService.test(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["webhooks", id, "deliveries"] })
+    },
+  })
+}

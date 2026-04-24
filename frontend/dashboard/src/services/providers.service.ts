@@ -12,6 +12,9 @@ export interface ProviderConnection {
   avg_latency_ms: number | null
   consecutive_failures: number
   last_health_check_at: string | null
+  region: string | null
+  smtp_host: string | null
+  smtp_port: number | null
   created_at: string
   verification?: {
     verified: boolean

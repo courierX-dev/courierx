@@ -103,7 +103,6 @@ module Api
           email: tenant.email,
           mode: tenant.mode,
           status: tenant.status,
-          plan_id: tenant.plan_id,
           settings: tenant.settings,
           created_at: tenant.created_at
         }

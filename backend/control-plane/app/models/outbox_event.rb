@@ -1,10 +1,14 @@
 class OutboxEvent < ApplicationRecord
-  STATUSES = %w[pending processing processed failed dead].freeze
+  STATUSES     = %w[pending processing processed failed dead].freeze
+  DESTINATIONS = %w[go_core cloud].freeze
 
-  validates :event_type, presence: true
-  validates :status,     presence: true, inclusion: { in: STATUSES }
+  validates :event_type,  presence: true
+  validates :status,      presence: true, inclusion: { in: STATUSES }
+  validates :destination, presence: true, inclusion: { in: DESTINATIONS }
 
-  scope :pending,    -> { where(status: "pending") }
+  scope :for_go_core, -> { where(destination: "go_core") }
+  scope :for_cloud,   -> { where(destination: "cloud") }
+  scope :pending,     -> { where(status: "pending") }
   scope :processable, -> {
     pending
       .where("process_after IS NULL OR process_after <= ?", Time.current)

@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/dashboard/page-header"
 import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { useEmails } from "@/hooks/use-emails"
+import { EmailDetailDialog } from "@/components/dashboard/email-detail-dialog"
 
 const ALL_STATUSES = ["all", "queued", "sent", "delivered", "bounced", "complained", "failed", "suppressed"]
 
@@ -30,6 +31,7 @@ export default function LogsPage() {
   const [search, setSearch]   = useState("")
   const [status, setStatus]   = useState("all")
   const [page, setPage]       = useState(1)
+  const [openId, setOpenId]   = useState<string | null>(null)
 
   // Debounced search: useEmails re-fetches whenever queryKey changes
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -142,8 +144,9 @@ export default function LogsPage() {
               filtered.map((email, i) => (
                 <tr
                   key={email.id}
+                  onClick={() => setOpenId(email.id)}
                   className={cn(
-                    "hover:bg-muted/20 transition-colors cursor-default",
+                    "hover:bg-muted/20 transition-colors cursor-pointer",
                     i < filtered.length - 1 && "border-b border-border/50",
                   )}
                 >
@@ -195,6 +198,11 @@ export default function LogsPage() {
           </Button>
         </div>
       </div>
+
+      <EmailDetailDialog
+        emailId={openId}
+        onOpenChange={(open) => !open && setOpenId(null)}
+      />
     </PageShell>
   )
 }

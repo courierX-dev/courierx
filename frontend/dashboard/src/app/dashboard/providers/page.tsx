@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Server, RefreshCw, Key, Copy, Check } from "lucide-react"
+import { Plus, Server, RefreshCw, Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageShell } from "@/components/dashboard/page-shell"
 import { PageHeader } from "@/components/dashboard/page-header"
@@ -15,6 +15,7 @@ import {
 } from "@/hooks/use-providers"
 import type { ProviderConnection } from "@/services/providers.service"
 import { ConnectProviderDialog } from "./connect-provider-dialog"
+import { ProviderDetailDialog } from "./provider-detail-dialog"
 
 const PROVIDER_LABELS: Record<string, string> = {
   sendgrid: "SendGrid",
@@ -44,29 +45,30 @@ function ProviderCard({
   conn,
   onVerify,
   onDelete,
+  onOpen,
   isVerifying,
   isDeleting,
 }: {
   conn: ProviderConnection
   onVerify: () => void
   onDelete: () => void
+  onOpen: () => void
   isVerifying: boolean
   isDeleting: boolean
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [copied, setCopied] = useState(false)
   const connected = conn.status === "active"
-  const maskedKey = "sk_live_\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(maskedKey)
-    setCopied(true)
-    toast.success("Copied to clipboard")
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const successPct = conn.success_rate != null ? `${(conn.success_rate * 100).toFixed(1)}%` : "\u2014"
+  const latency = conn.avg_latency_ms != null ? `${conn.avg_latency_ms} ms` : "\u2014"
+  const lastCheck = conn.last_health_check_at
+    ? new Date(conn.last_health_check_at).toLocaleString()
+    : "Never checked"
 
   return (
-    <div className="bg-card border border-border rounded-xl shadow-card p-5">
+    <div
+      onClick={onOpen}
+      className="bg-card border border-border rounded-xl shadow-card p-5 cursor-pointer hover:border-foreground/20 transition-colors"
+    >
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
         <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center text-sm font-bold text-foreground/80 shrink-0">
@@ -99,17 +101,31 @@ function ProviderCard({
         </div>
       </div>
 
-      {/* API key row */}
-      <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-[10px] py-[7px] mb-3">
-        <Key className="h-3 w-3 text-muted-foreground shrink-0" />
-        <span className="font-mono text-xs text-muted-foreground flex-1 truncate">{maskedKey}</span>
-        <button onClick={handleCopy} className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Copy API key">
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-        </button>
+      {/* Operational summary */}
+      <div className="grid grid-cols-3 gap-2 bg-background border border-border rounded-lg px-3 py-2 mb-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Success</div>
+          <div className="font-mono text-xs">{successPct}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Latency</div>
+          <div className="font-mono text-xs">{latency}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Failures</div>
+          <div className={cn(
+            "font-mono text-xs",
+            conn.consecutive_failures > 0 ? "text-destructive" : "",
+          )}>{conn.consecutive_failures}</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 mb-3 text-[11px] text-muted-foreground">
+        <Activity className="h-3 w-3" />
+        <span>Last check {lastCheck}</span>
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onVerify}
           disabled={isVerifying}
@@ -155,6 +171,7 @@ export default function ProvidersPage() {
   const verifyMutation = useVerifyProviderConnection()
   const [connectOpen, setConnectOpen] = useState(false)
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<ProviderConnection | null>(null)
 
   async function handleDelete(conn: ProviderConnection) {
     try {
@@ -235,6 +252,7 @@ export default function ProvidersPage() {
               conn={conn}
               onVerify={() => handleVerify(conn)}
               onDelete={() => handleDelete(conn)}
+              onOpen={() => setDetail(conn)}
               isVerifying={verifyingId === conn.id}
               isDeleting={deleteMutation.isPending}
             />
@@ -258,6 +276,13 @@ export default function ProvidersPage() {
       </div>
 
       <ConnectProviderDialog open={connectOpen} onOpenChange={setConnectOpen} />
+
+      <ProviderDetailDialog
+        conn={detail}
+        onOpenChange={(o) => !o && setDetail(null)}
+        onVerify={() => detail && handleVerify(detail)}
+        isVerifying={!!detail && verifyingId === detail.id}
+      />
     </PageShell>
   )
 }

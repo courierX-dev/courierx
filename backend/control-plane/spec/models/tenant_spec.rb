@@ -55,7 +55,6 @@ RSpec.describe Tenant, type: :model do
     it { should have_many(:mcp_connections).dependent(:destroy) }
     it { should have_many(:usage_stats).dependent(:destroy) }
     it { should have_one(:rate_limit_policy).dependent(:destroy) }
-    it { should have_one(:compliance_profile).dependent(:destroy) }
   end
 
   describe 'slug auto-generation' do

@@ -2,7 +2,6 @@ class CreateProviderConnections < ActiveRecord::Migration[7.1]
   def change
     create_table :provider_connections, id: :uuid do |t|
       t.references :tenant,              null: false, foreign_key: true, type: :uuid
-      t.references :managed_sub_account, foreign_key: true, type: :uuid
       t.string     :provider,            null: false
       t.string     :mode,                null: false
       t.string     :status,              null: false, default: "active"

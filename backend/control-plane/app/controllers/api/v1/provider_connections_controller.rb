@@ -70,6 +70,7 @@ module Api
           success_rate: c.success_rate, avg_latency_ms: c.avg_latency_ms,
           consecutive_failures: c.consecutive_failures,
           last_health_check_at: c.last_health_check_at,
+          region: c.region, smtp_host: c.smtp_host, smtp_port: c.smtp_port,
           created_at: c.created_at
         }
       end

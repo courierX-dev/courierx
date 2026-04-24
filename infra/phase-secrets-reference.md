@@ -41,14 +41,6 @@
 | -------------- | -------- | -------------------------- | ------------------- |
 | `FRONTEND_URL` | ✅ prod  | `https://app.courierx.dev` | Allowed CORS origin |
 
-### Billing (Stripe)
-
-| Variable                 | Required | Example       | Notes                          |
-| ------------------------ | -------- | ------------- | ------------------------------ |
-| `STRIPE_SECRET_KEY`      | —        | `sk_live_...` | Server-side Stripe key         |
-| `STRIPE_PUBLISHABLE_KEY` | —        | `pk_live_...` | Client-safe key (if needed)    |
-| `STRIPE_WEBHOOK_SECRET`  | —        | `whsec_...`   | Webhook signature verification |
-
 ### Notification Email (system emails, not transactional)
 
 | Variable        | Required | Example            | Notes                             |

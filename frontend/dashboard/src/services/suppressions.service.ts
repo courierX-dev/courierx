@@ -5,6 +5,7 @@ export interface Suppression {
   email: string
   reason: string
   note: string | null
+  source_email_id: string | null
   created_at: string
 }
 

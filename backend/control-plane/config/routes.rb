@@ -35,13 +35,6 @@ Rails.application.routes.draw do
       get   "auth/readiness", to: "auth#readiness"
       post  "auth/activate",  to: "auth#activate"
 
-      # ── Waitlist (public, no auth) ──
-      post "waitlist",        to: "waitlist#create"
-      get  "waitlist/status", to: "waitlist#status"
-
-      # ── Billing webhooks (public, signature-verified) ──
-      post "billing/webhooks", to: "billing_webhooks#create"
-
       # ── Inbound provider webhooks (public, each provider verifies its own signature) ──
       post "webhooks/sendgrid", to: "provider_webhooks/sendgrid#create"
       post "webhooks/mailgun",  to: "provider_webhooks/mailgun#create"
@@ -53,8 +46,6 @@ Rails.application.routes.draw do
       # ── Dashboard ──
       namespace :dashboard do
         get "metrics",    to: "metrics#index"
-        get "billing",    to: "billing#index"
-        get "compliance", to: "compliance#index"
       end
 
       # ── Resources ──
@@ -89,7 +80,12 @@ Rails.application.routes.draw do
         end
       end
       resources :suppressions,         only: [:index, :create, :destroy]
-      resources :webhook_endpoints,    only: [:index, :show, :create, :update, :destroy]
+      resources :webhook_endpoints,    only: [:index, :show, :create, :update, :destroy] do
+        member do
+          get  :deliveries
+          post :test
+        end
+      end
       resources :mcp_connections,      only: [:index, :show, :create, :update, :destroy]
       resources :usage_stats,          only: [:index]
 

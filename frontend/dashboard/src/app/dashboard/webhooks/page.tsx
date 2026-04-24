@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, Pencil } from "lucide-react"
+import { Plus, Trash2, Pencil, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import { WEBHOOK_EVENTS, type WebhookEndpoint } from "@/services/webhooks.service"
 import { toast } from "sonner"
 import { useWebhooks, useCreateWebhook, useUpdateWebhook, useDeleteWebhook } from "@/hooks/use-webhooks"
+import { WebhookDeliveriesDialog } from "./webhook-deliveries-dialog"
 
 function WebhookForm({
   initial,
@@ -126,6 +127,7 @@ export default function WebhooksPage() {
   const [addOpen, setAddOpen]             = useState(false)
   const [editTarget, setEditTarget]       = useState<WebhookEndpoint | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [historyTarget, setHistoryTarget] = useState<WebhookEndpoint | null>(null)
 
   async function handleCreate(data: { url: string; description: string; events: string[] }) {
     await createMutation.mutateAsync(data)
@@ -279,6 +281,15 @@ export default function WebhooksPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-7 px-2 text-xs gap-1 text-muted-foreground"
+                          onClick={() => setHistoryTarget(w)}
+                        >
+                          <History className="h-3.5 w-3.5" />
+                          History
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-7 w-7 p-0 text-muted-foreground"
                           onClick={() => setEditTarget(w)}
                         >
@@ -353,6 +364,11 @@ export default function WebhooksPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <WebhookDeliveriesDialog
+        endpoint={historyTarget}
+        onOpenChange={(o) => !o && setHistoryTarget(null)}
+      />
     </PageShell>
   )
 }

@@ -101,6 +101,6 @@ Thumbs.db
 
 # AI
 .claude/
-marketing/*
-!marketing/CourierX/
-!marketing/CourierX-docs/
+
+# Cloud / internal (not part of OSS distribution)
+cloud/

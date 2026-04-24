@@ -18,6 +18,8 @@ import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useSuppressions, useCreateSuppression, useDeleteSuppression } from "@/hooks/use-suppressions"
+import { EmailDetailDialog } from "@/components/dashboard/email-detail-dialog"
+import type { Suppression } from "@/services/suppressions.service"
 
 const REASON_COLOR: Record<string, string> = {
   hard_bounce: "text-destructive",
@@ -38,6 +40,8 @@ export default function SuppressionsPage() {
   const [email, setEmail]        = useState("")
   const [reason, setReason]      = useState("manual")
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [detail, setDetail]       = useState<Suppression | null>(null)
+  const [openEmailId, setOpenEmailId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     if (!suppressions) return []
@@ -157,8 +161,9 @@ export default function SuppressionsPage() {
               filtered.map((s, i) => (
                 <tr
                   key={s.id}
+                  onClick={() => confirmId !== s.id && setDetail(s)}
                   className={cn(
-                    "hover:bg-muted/20 transition-colors",
+                    "hover:bg-muted/20 transition-colors cursor-pointer",
                     i < filtered.length - 1 && "border-b border-border/50",
                   )}
                 >
@@ -171,7 +176,7 @@ export default function SuppressionsPage() {
                   <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground hidden md:table-cell">
                     {new Date(s.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     {confirmId === s.id ? (
                       <div className="flex items-center justify-end gap-1.5">
                         <span className="text-xs text-muted-foreground">Remove?</span>
@@ -257,6 +262,61 @@ export default function SuppressionsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Suppression detail */}
+      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-base truncate">{detail?.email}</DialogTitle>
+            <DialogDescription>Suppression details</DialogDescription>
+          </DialogHeader>
+          {detail && (
+            <div className="space-y-3 mt-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Reason</span>
+                <span className={cn("font-mono", REASON_COLOR[detail.reason] ?? "")}>
+                  {detail.reason}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Suppressed at</span>
+                <span className="font-mono text-xs">{new Date(detail.created_at).toLocaleString()}</span>
+              </div>
+              {detail.note && (
+                <div>
+                  <p className="text-muted-foreground mb-1">Note</p>
+                  <p className="rounded-md border border-border bg-muted/20 p-2 text-xs whitespace-pre-wrap">
+                    {detail.note}
+                  </p>
+                </div>
+              )}
+              {detail.source_email_id && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setOpenEmailId(detail.source_email_id)
+                    setDetail(null)
+                  }}
+                >
+                  View original message
+                </Button>
+              )}
+              {!detail.source_email_id && (
+                <p className="text-[11px] text-muted-foreground">
+                  No source message linked. This suppression was added manually or imported.
+                </p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <EmailDetailDialog
+        emailId={openEmailId}
+        onOpenChange={(o) => !o && setOpenEmailId(null)}
+      />
     </PageShell>
   )
 }

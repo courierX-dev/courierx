@@ -1,7 +1,9 @@
 {
   "git.scanRepositories": [
-    "marketing/CourierX",
-    "marketing/CourierX-docs"
+    "cloud/marketing/app/CourierX",
+    "cloud/marketing/app/CourierX-docs"
   ],
-  "git.autoRepositoryDetection": "subFolders"
+  "git.autoRepositoryDetection": "subFolders",
+  "git.repositoryScanMaxDepth": 6,
+  "git.repositoryScanIgnoredFolders": ["node_modules"]
 }

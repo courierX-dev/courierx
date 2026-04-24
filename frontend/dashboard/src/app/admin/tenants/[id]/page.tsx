@@ -64,7 +64,7 @@ export default function TenantDetailPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <button 
+      <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm font-medium"
       >
@@ -155,7 +155,7 @@ export default function TenantDetailPage() {
                 <p className="font-medium text-white">Shadow Login</p>
                 <p className="text-sm text-zinc-500">Access dashboard as this tenant</p>
               </div>
-              <button 
+              <button
                 onClick={async () => {
                   try {
                     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
@@ -176,13 +176,13 @@ export default function TenantDetailPage() {
                 Impersonate
               </button>
             </div>
-            
+
             <div className="p-4 border border-red-500/20 bg-red-500/5 rounded-lg flex items-center justify-between">
               <div>
                 <p className="font-medium text-red-400">Hard Ban</p>
                 <p className="text-sm text-zinc-500">Immediately freeze all API access</p>
               </div>
-              <button 
+              <button
                 onClick={async () => {
                   if (!confirm(`Are you sure you want to suspend ${tenant.name} from the platform?`)) return;
                   try {

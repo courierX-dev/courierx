@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { ErrorBanner } from "./inline-error"
 
@@ -51,6 +53,7 @@ interface CampaignTableProps {
 }
 
 export function CampaignTable({ campaigns, isLoading, isError, onRetry }: CampaignTableProps) {
+  const router = useRouter()
   const thClass =
     "text-[11px] font-medium text-muted-foreground tracking-[0.05em] uppercase py-2 px-[14px] text-left bg-background border-b border-border whitespace-nowrap"
 
@@ -58,9 +61,9 @@ export function CampaignTable({ campaigns, isLoading, isError, onRetry }: Campai
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-4 py-[14px] border-b border-border flex justify-between items-center">
         <span className="text-sm font-semibold text-foreground">Recent campaigns</span>
-        <button className="text-xs text-primary font-medium hover:underline">
+        <Link href="/dashboard/campaigns" className="text-xs text-primary font-medium hover:underline">
           View all &rarr;
-        </button>
+        </Link>
       </div>
       {isLoading ? (
         <div className="p-4 space-y-3" aria-busy="true">
@@ -90,6 +93,7 @@ export function CampaignTable({ campaigns, isLoading, isError, onRetry }: Campai
           {campaigns.map((r, i) => (
             <tr
               key={r.id}
+              onClick={() => router.push(`/dashboard/campaigns?subject=${encodeURIComponent(r.name)}`)}
               className={cn(
                 "cursor-pointer transition-colors hover:bg-muted/50",
                 i % 2 === 1 && "bg-background"

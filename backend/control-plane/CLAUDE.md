@@ -3,7 +3,7 @@
 ## What is this?
 
 Rails 8.1 API-only app. The "brain" of CourierX — handles multi-tenancy, auth,
-email dispatch orchestration, provider management, and billing.
+email dispatch orchestration, and provider management.
 
 ## How to run
 
@@ -20,7 +20,7 @@ phase run "bundle exec rails console"       # REPL
 - **JWT**: `Authorization: Bearer eyJ...` → `JwtService.decode` → find tenant
 - **API Key**: `Authorization: Bearer cxk_live_...` → SHA-256 hash → `ApiKey.authenticate`
 - **Auth concern**: `app/controllers/concerns/authenticatable.rb` sets `current_tenant`
-- **Public endpoints**: auth/register, auth/login, waitlist, billing webhooks
+- **Public endpoints**: auth/register, auth/login, provider inbound webhooks
 
 ### Email sending flow
 
@@ -49,8 +49,8 @@ Secrets managed by Phase (`phase secrets list --show`).
 
 ```
 app/
-├── controllers/api/v1/   # 14 controllers
-├── models/               # 22 models (all UUID PKs)
+├── controllers/api/v1/   # 12 controllers (cloud-only billing/waitlist/compliance live in cloud/)
+├── models/               # 22 models, all UUID PKs (cloud-only models live in cloud/)
 ├── services/             # EmailDispatchService, JwtService
 ├── jobs/                 # 6 Sidekiq jobs
 └── controllers/concerns/ # Authenticatable, Paginatable, RateLimitable

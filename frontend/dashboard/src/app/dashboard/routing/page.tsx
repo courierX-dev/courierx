@@ -19,6 +19,11 @@ import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useProviderConnections, useRoutingRules, useCreateRoutingRule, useDeleteRoutingRule } from "@/hooks/use-providers"
+import { useEmails } from "@/hooks/use-emails"
+import { EmailDetailDialog } from "@/components/dashboard/email-detail-dialog"
+import { ProviderDetailDialog } from "../providers/provider-detail-dialog"
+import type { ProviderConnection } from "@/services/providers.service"
+import { useVerifyProviderConnection } from "@/hooks/use-providers"
 
 const STRATEGIES = ["failover", "round_robin", "weighted"]
 
@@ -44,6 +49,26 @@ export default function RoutingPage() {
 
   // Inline delete confirm
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  // Drill-ins
+  const [providerDetail, setProviderDetail] = useState<ProviderConnection | null>(null)
+  const [verifyingId, setVerifyingId] = useState<string | null>(null)
+  const [openEmailId, setOpenEmailId] = useState<string | null>(null)
+  const verifyMutation = useVerifyProviderConnection()
+  const { data: failedEmails } = useEmails({ status: "failed", per_page: 10 })
+  const { data: bouncedEmails } = useEmails({ status: "bounced", per_page: 10 })
+
+  async function handleVerifyDetail(conn: ProviderConnection) {
+    setVerifyingId(conn.id)
+    try {
+      await verifyMutation.mutateAsync(conn.id)
+      toast.success("Re-verified", { description: conn.display_name ?? conn.provider })
+    } catch {
+      toast.error("Verification failed")
+    } finally {
+      setVerifyingId(null)
+    }
+  }
 
   function resetRuleForm() {
     setRuleName(""); setStrategy("failover"); setMatchType("catch_all")
@@ -120,7 +145,11 @@ export default function RoutingPage() {
           ) : (
             <div className="divide-y divide-border/50">
               {connList.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                <div
+                  key={p.id}
+                  onClick={() => setProviderDetail(p)}
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/20"
+                >
                   <span className="text-xs font-mono text-muted-foreground/60 w-4 text-center">
                     {p.priority}
                   </span>
@@ -245,14 +274,48 @@ export default function RoutingPage() {
         </div>
       </div>
 
-      {/* Failover history */}
+      {/* Recent provider failures (failover-adjacent signal) */}
       <div className="rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border bg-muted/20">
-          <p className="text-xs font-medium">Failover history</p>
+        <div className="px-4 py-2.5 border-b border-border bg-muted/20 flex items-center justify-between">
+          <p className="text-xs font-medium">Recent provider failures</p>
+          <span className="text-[10px] text-muted-foreground font-mono">
+            {(failedEmails?.length ?? 0) + (bouncedEmails?.length ?? 0)} in window
+          </span>
         </div>
-        <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-          No failover events recorded.
-        </p>
+        {(() => {
+          const rows = [...(failedEmails ?? []), ...(bouncedEmails ?? [])]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 10)
+          if (rows.length === 0) {
+            return (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No recent provider failures. Routing is healthy.
+              </p>
+            )
+          }
+          return (
+            <ul className="divide-y divide-border/50">
+              {rows.map((e) => (
+                <li
+                  key={e.id}
+                  onClick={() => setOpenEmailId(e.id)}
+                  className="px-4 py-2 flex items-center gap-3 text-xs cursor-pointer hover:bg-muted/20"
+                >
+                  <span className={cn(
+                    "h-1.5 w-1.5 rounded-full shrink-0",
+                    e.status === "failed" ? "bg-destructive" : "bg-warning",
+                  )} />
+                  <span className="font-mono text-[11px] text-muted-foreground w-40 shrink-0">
+                    {new Date(e.created_at).toLocaleString()}
+                  </span>
+                  <span className="font-mono w-20 capitalize">{e.status}</span>
+                  <span className="font-mono text-muted-foreground truncate">{e.to_email}</span>
+                  <span className="text-muted-foreground truncate ml-auto">{e.subject}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        })()}
       </div>
 
       {/* Add rule dialog */}
@@ -353,6 +416,18 @@ export default function RoutingPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ProviderDetailDialog
+        conn={providerDetail}
+        onOpenChange={(o) => !o && setProviderDetail(null)}
+        onVerify={() => providerDetail && handleVerifyDetail(providerDetail)}
+        isVerifying={!!providerDetail && verifyingId === providerDetail.id}
+      />
+
+      <EmailDetailDialog
+        emailId={openEmailId}
+        onOpenChange={(o) => !o && setOpenEmailId(null)}
+      />
     </PageShell>
   )
 }
