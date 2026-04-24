@@ -46,6 +46,8 @@ Rails.application.routes.draw do
       # ── Dashboard ──
       namespace :dashboard do
         get "metrics",    to: "metrics#index"
+        get "billing",    to: "billing#index"
+        get "compliance", to: "compliance#index"
       end
 
       # ── Resources ──

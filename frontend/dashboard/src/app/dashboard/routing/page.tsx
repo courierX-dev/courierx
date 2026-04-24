@@ -22,6 +22,7 @@ import { useProviderConnections, useRoutingRules, useCreateRoutingRule, useDelet
 import { useEmails } from "@/hooks/use-emails"
 import { EmailDetailDialog } from "@/components/dashboard/email-detail-dialog"
 import { ProviderDetailDialog } from "../providers/provider-detail-dialog"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 import type { ProviderConnection } from "@/services/providers.service"
 import { useVerifyProviderConnection } from "@/hooks/use-providers"
 
@@ -154,6 +155,7 @@ export default function RoutingPage() {
                     {p.priority}
                   </span>
                   <DotIndicator status={p.status} />
+                  <ProviderIcon provider={p.provider} size={16} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{p.display_name ?? p.provider}</p>
                     <p className="text-[10px] font-mono text-muted-foreground">

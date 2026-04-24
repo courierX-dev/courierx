@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { ProviderConnection } from "@/services/providers.service"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 
 const PROVIDER_LABELS: Record<string, string> = {
   sendgrid: "SendGrid",
@@ -52,8 +53,15 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
     <Dialog open={!!conn} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{conn.display_name ?? provider}</DialogTitle>
-          <DialogDescription>{provider} · {conn.mode.toUpperCase()}</DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+              <ProviderIcon provider={conn.provider} size={20} />
+            </div>
+            <div>
+              <DialogTitle>{conn.display_name ?? provider}</DialogTitle>
+              <DialogDescription>{provider} · {conn.mode.toUpperCase()}</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="rounded-md border border-border bg-muted/10 px-3 py-2">

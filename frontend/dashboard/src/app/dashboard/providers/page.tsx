@@ -14,6 +14,7 @@ import {
   useVerifyProviderConnection,
 } from "@/hooks/use-providers"
 import type { ProviderConnection } from "@/services/providers.service"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 import { ConnectProviderDialog } from "./connect-provider-dialog"
 import { ProviderDetailDialog } from "./provider-detail-dialog"
 
@@ -71,8 +72,8 @@ function ProviderCard({
     >
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center text-sm font-bold text-foreground/80 shrink-0">
-          {providerLabel(conn.provider).charAt(0)}
+        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+          <ProviderIcon provider={conn.provider} size={20} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-foreground">

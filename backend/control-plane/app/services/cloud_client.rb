@@ -19,9 +19,11 @@
 #   so the rest of the app never branches on edition.
 class CloudClient
   class Error < StandardError; end
+  class Disabled < Error; end
 
   SYNC_TIMEOUT_SECONDS = 0.5
   EVENT_TIMEOUT_SECONDS = 5
+  DASHBOARD_TIMEOUT_SECONDS = 5
 
   class << self
     def enabled?
@@ -47,6 +49,17 @@ class CloudClient
       :allowed
     end
 
+    # Dashboard read: tenant billing snapshot (plan, usage, invoices).
+    # Raises CloudClient::Disabled in OSS mode so controllers can 404.
+    def dashboard_billing(tenant:)
+      fetch_dashboard("/internal/dashboard/billing", tenant: tenant)
+    end
+
+    # Dashboard read: tenant compliance / KYC state.
+    def dashboard_compliance(tenant:)
+      fetch_dashboard("/internal/dashboard/compliance", tenant: tenant)
+    end
+
     # Durable event publish. Called by CloudEventJob. Raises on failure so the
     # outbox event stays pending and Sidekiq retries it.
     def publish_event!(event_type:, payload:)
@@ -65,6 +78,20 @@ class CloudClient
     end
 
     private
+
+    def fetch_dashboard(path, tenant:)
+      raise Disabled, "cloud service not configured" unless enabled?
+
+      response = connection(timeout: DASHBOARD_TIMEOUT_SECONDS).get(path) do |req|
+        req.headers["X-Internal-Secret"] = shared_secret
+        req.params["tenant_id"] = tenant.id
+      end
+
+      return parse(response.body) if response.success?
+      raise Error, "cloud service returned #{response.status}: #{response.body}"
+    rescue Faraday::Error => e
+      raise Error, "cloud service unreachable: #{e.message}"
+    end
 
     def base_url      = ENV["CLOUD_SERVICE_URL"].presence
     def shared_secret = ENV["CLOUD_SERVICE_SECRET"].to_s

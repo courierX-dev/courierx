@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { Suspense, useState, useMemo, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { Search, Mail } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,14 @@ const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
 
 
 export default function CampaignsPage() {
+  return (
+    <Suspense fallback={null}>
+      <CampaignsPageInner />
+    </Suspense>
+  )
+}
+
+function CampaignsPageInner() {
   const searchParams = useSearchParams()
   const initialSubject = searchParams.get("subject") ?? ""
   const [search, setSearch] = useState("")

@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useCreateProviderConnection } from "@/hooks/use-providers"
 import type { CreateProviderConnectionRequest } from "@/services/providers.service"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 
 interface Props {
   open: boolean
@@ -230,12 +231,17 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
                 key={p.id}
                 onClick={() => handleSelect(p.id)}
                 className={cn(
-                  "flex flex-col items-start rounded-lg border border-border p-3 text-left transition-colors",
+                  "flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors",
                   "hover:bg-muted/40 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/30",
                 )}
               >
-                <span className="text-sm font-medium">{p.name}</span>
-                <span className="text-[11px] text-muted-foreground mt-0.5">{p.description}</span>
+                <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                  <ProviderIcon provider={p.id} size={18} />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-medium">{p.name}</span>
+                  <span className="text-[11px] text-muted-foreground mt-0.5">{p.description}</span>
+                </div>
               </button>
             ))}
           </div>
