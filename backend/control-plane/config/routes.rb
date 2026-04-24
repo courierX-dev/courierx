@@ -8,6 +8,13 @@ Rails.application.routes.draw do
   # Now requires SIDEKIQ_USERNAME and SIDEKIQ_PASSWORD env vars. The UI is
   # disabled entirely if SIDEKIQ_PASSWORD is not set, to prevent silent exposure.
   require "sidekiq/web"
+  # api_only Rails strips cookies/sessions from the global middleware stack,
+  # so give the Web mount its own Rack::Session::Cookie for CSRF + flash.
+  # (Sidekiq 7 dropped the Sinatra-based Sidekiq::Web.set :sessions API.)
+  Sidekiq::Web.use Rack::Session::Cookie,
+    secret:    Rails.application.secret_key_base,
+    same_site: :lax,
+    max_age:   86_400
   sidekiq_password = ENV.fetch("SIDEKIQ_PASSWORD", nil)
   if sidekiq_password.present?
     Sidekiq::Web.use Rack::Auth::Basic do |username, password|
