@@ -60,4 +60,35 @@ class Email < ApplicationRecord
   def mark_failed!(error:)
     update!(status: "failed", last_error: error, attempt_count: attempt_count + 1)
   end
+
+  # ── Display helpers (consumed by EmailsController#email_json) ──────────────
+
+  # Human-friendly label for the current status. Backend `status` stays the
+  # canonical 8-value enum; this is the presentation layer.
+  DISPLAY_STATUS = {
+    "queued"     => "Accepted",
+    "sent"       => "In flight",
+    "delivered"  => "Delivered",
+    "bounced"    => "Bounced",
+    "complained" => "Marked as spam",
+    "failed"     => "Failed",
+    "suppressed" => "Suppressed"
+  }.freeze
+
+  def display_status
+    DISPLAY_STATUS[status] || status.to_s.titleize
+  end
+
+  # Translated user-facing error message. Returns nil when there's nothing to
+  # surface (delivered emails, queued emails without errors, etc.).
+  def display_message
+    return nil if last_error.blank?
+    EmailErrorTranslator.translate(error: last_error, from_email: from_email).message
+  end
+
+  # Primary CTA for the failure state — { label:, url: } or { label:, action: }.
+  def display_cta
+    return nil if last_error.blank?
+    EmailErrorTranslator.translate(error: last_error, from_email: from_email).cta
+  end
 end

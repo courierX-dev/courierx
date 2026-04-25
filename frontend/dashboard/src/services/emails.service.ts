@@ -1,11 +1,22 @@
 import api from "./api"
 
+export interface EmailDisplayCta {
+  label: string
+  url?: string
+  action?: string
+  args?: Record<string, unknown>
+}
+
 export interface EmailListItem {
   id: string
   from_email: string
   to_email: string
   subject: string
   status: string
+  display_status: string
+  display_message: string | null
+  display_cta: EmailDisplayCta | null
+  last_error: string | null
   provider_message_id: string | null
   tags: string[]
   queued_at: string | null

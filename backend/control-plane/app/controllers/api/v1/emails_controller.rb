@@ -95,6 +95,13 @@ module Api
           to_email: email.to_email,
           subject: email.subject,
           status: email.status,
+          # Display layer — see Email#display_status / EmailErrorTranslator.
+          # Frontend should render display_status + display_message instead
+          # of computing these from status/last_error itself.
+          display_status:  email.display_status,
+          display_message: email.display_message,
+          display_cta:     email.display_cta,
+          last_error:      email.last_error,
           provider_message_id: email.provider_message_id,
           tags: email.tags,
           queued_at: email.queued_at,

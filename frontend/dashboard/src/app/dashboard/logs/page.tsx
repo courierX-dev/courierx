@@ -17,12 +17,12 @@ const STATUS_COLOR: Record<string, string> = {
   delivered:  "text-success",
   opened:     "text-sky-500 dark:text-sky-400",
   clicked:    "text-violet-500 dark:text-violet-400",
-  bounced:    "text-destructive",
+  bounced:    "text-amber-500 dark:text-amber-400",
   failed:     "text-destructive",
   complained: "text-destructive",
   suppressed: "text-muted-foreground",
   queued:     "text-muted-foreground",
-  sent:       "text-primary",
+  sent:       "text-sky-500 dark:text-sky-400",
 }
 
 const PER_PAGE = 25
@@ -163,8 +163,8 @@ export default function LogsPage() {
                     {email.subject}
                   </td>
                   <td className="px-4 py-2">
-                    <span className={cn("text-xs font-medium capitalize", STATUS_COLOR[email.status] ?? "text-muted-foreground")}>
-                      {email.status}
+                    <span className={cn("text-xs font-medium", STATUS_COLOR[email.status] ?? "text-muted-foreground")}>
+                      {email.display_status ?? email.status}
                     </span>
                   </td>
                 </tr>
