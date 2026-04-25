@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/courierx/core-go/internal/providers"
 	"github.com/courierx/core-go/internal/types"
 	"github.com/gofiber/fiber/v2"
 )
@@ -197,43 +198,14 @@ func verifyPostmark(ctx context.Context, config map[string]interface{}) error {
 	return nil
 }
 
-// verifySES checks credentials via ses:GetSendQuota using the SES v2 API.
+// verifySES checks credentials by issuing a signed GET to the SES v2
+// GetAccount endpoint via the shared SESProvider implementation.
 func verifySES(ctx context.Context, config map[string]interface{}) error {
-	accessKey, _ := config["accessKeyId"].(string)
-	secretKey, _ := config["secretAccessKey"].(string)
-	region, _ := config["region"].(string)
-
-	if accessKey == "" || secretKey == "" {
-		return fmt.Errorf("accessKeyId and secretAccessKey are required")
-	}
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	// Use SES v1 GetSendQuota — it's the simplest way to validate credentials
-	// without sending anything. We make a signed request using AWS Signature V4.
-	endpoint := fmt.Sprintf("https://email.%s.amazonaws.com/?Action=GetSendQuota", region)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-
-	// Sign the request with AWS Signature V4
-	if err := signAWSRequest(req, accessKey, secretKey, region, "ses"); err != nil {
-		return fmt.Errorf("failed to sign request: %w", err)
-	}
-
-	resp, err := httpClient().Do(req)
+	p, err := providers.NewSESProvider(config)
 	if err != nil {
-		return fmt.Errorf("connection failed: %w", err)
+		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("invalid AWS credentials (HTTP %d)", resp.StatusCode)
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected response (HTTP %d): %s", resp.StatusCode, truncate(string(body), 200))
-	}
-	return nil
+	return p.Verify(ctx)
 }
 
 // verifySMTP attempts an EHLO + AUTH handshake without sending a message.
@@ -299,34 +271,6 @@ func verifySMTP(ctx context.Context, config map[string]interface{}) error {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 	}
-
-	return nil
-}
-
-// signAWSRequest adds AWS Signature V4 headers to a request.
-// This is a minimal implementation for GET requests to SES.
-func signAWSRequest(req *http.Request, accessKey, secretKey, region, service string) error {
-	// For simplicity, use the query-string approach with basic auth header
-	// SES also accepts basic Authorization header with access key
-	now := time.Now().UTC()
-	dateStamp := now.Format("20060102")
-	amzDate := now.Format("20060102T150405Z")
-
-	req.Header.Set("X-Amz-Date", amzDate)
-	req.Header.Set("Host", req.URL.Host)
-
-	// Create a canonical request for SES v1 query API
-	// Using a simplified signature — for production, use the full AWS SDK
-	// Here we use a temporary credential header approach
-	credential := fmt.Sprintf("%s/%s/%s/%s/aws4_request", accessKey, dateStamp, region, service)
-	req.Header.Set("Authorization", fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s", credential))
-
-	// Note: This simplified signing won't produce valid signatures for production.
-	// The SES provider (ses.go) uses the full AWS SDK. For verification purposes,
-	// we construct a minimal request that AWS will reject with "InvalidSignature"
-	// (credentials exist but sig is wrong) vs "InvalidClientTokenId" (key doesn't exist).
-	// Both are useful signals — a connection that reaches AWS at all validates network access.
-	_ = secretKey // used in full HMAC signing flow
 
 	return nil
 }

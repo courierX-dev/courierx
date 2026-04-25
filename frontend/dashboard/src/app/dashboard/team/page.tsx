@@ -305,7 +305,7 @@ export default function TeamPage() {
               <DialogHeader>
                 <DialogTitle>Invite team member</DialogTitle>
                 <DialogDescription>
-                  They'll receive an invitation link to join this workspace.
+                  They&apos;ll receive an invitation link to join this workspace.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-4">

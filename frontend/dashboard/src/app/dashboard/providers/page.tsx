@@ -59,6 +59,7 @@ function ProviderCard({
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const connected = conn.status === "active"
+  const iconStatus = connected ? "active" : "error"
   const successPct = conn.success_rate != null ? `${(conn.success_rate * 100).toFixed(1)}%` : "\u2014"
   const latency = conn.avg_latency_ms != null ? `${conn.avg_latency_ms} ms` : "\u2014"
   const lastCheck = conn.last_health_check_at
@@ -68,14 +69,15 @@ function ProviderCard({
   return (
     <div
       onClick={onOpen}
-      className="bg-card border border-border rounded-xl shadow-card p-5 cursor-pointer hover:border-foreground/20 transition-colors"
+      className={cn(
+        "bg-card border rounded-xl shadow-card p-5 cursor-pointer transition-colors",
+        connected ? "border-border hover:border-foreground/20" : "border-border/60 hover:border-foreground/15 opacity-90",
+      )}
     >
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-          <ProviderIcon provider={conn.provider} size={20} />
-        </div>
-        <div className="flex-1 min-w-0">
+        <ProviderIcon provider={conn.provider} size={20} chip status={iconStatus} />
+        <div className={cn("flex-1 min-w-0", !connected && "opacity-80")}>
           <div className="text-sm font-semibold text-foreground">
             {conn.display_name ?? providerLabel(conn.provider)}
           </div>

@@ -13,7 +13,7 @@ interface AnimatedNumberProps {
  * For non-numeric strings (or first render), it just displays the value.
  */
 export function AnimatedNumber({ value, className, duration = 400 }: AnimatedNumberProps) {
-  const [display, setDisplay] = useState(value)
+  const [animated, setAnimated] = useState<string | null>(null)
   const prevRef = useRef(value)
   const rafRef = useRef<number | null>(null)
 
@@ -25,9 +25,9 @@ export function AnimatedNumber({ value, className, duration = 400 }: AnimatedNum
     const prevNum = parseFloat(prev.replace(/[^0-9.\-]/g, ""))
     const nextNum = parseFloat(value.replace(/[^0-9.\-]/g, ""))
 
-    // If either isn't a number, just snap
+    // If either isn't a number, just snap — render falls through to `value`
     if (isNaN(prevNum) || isNaN(nextNum) || prev === value) {
-      setDisplay(value)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
       return
     }
 
@@ -63,10 +63,12 @@ export function AnimatedNumber({ value, className, duration = 400 }: AnimatedNum
         formatted += "%"
       }
 
-      setDisplay(formatted)
+      setAnimated(formatted)
 
       if (progress < 1) {
         rafRef.current = requestAnimationFrame(animate)
+      } else {
+        setAnimated(null)
       }
     }
 
@@ -77,5 +79,5 @@ export function AnimatedNumber({ value, className, duration = 400 }: AnimatedNum
     }
   }, [value, duration])
 
-  return <span className={className}>{display}</span>
+  return <span className={className}>{animated ?? value}</span>
 }

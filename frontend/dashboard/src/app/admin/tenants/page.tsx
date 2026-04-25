@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Terminal, Copy, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Terminal, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 interface Tenant {
@@ -25,7 +25,7 @@ export default function TenantsList({ apiKey }: { apiKey: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Tenant>>({});
 
-  const fetchTenants = async () => {
+  const fetchTenants = useCallback(async () => {
     setLoading(true);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
@@ -35,16 +35,16 @@ export default function TenantsList({ apiKey }: { apiKey: string }) {
       if (!res.ok) throw new Error("Invalid master key or unauthorized");
       const data = await res.json();
       setTenants(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiKey]);
 
   useEffect(() => {
     fetchTenants();
-  }, [apiKey]);
+  }, [fetchTenants]);
 
   const updateTenant = async (id: string) => {
     try {
@@ -62,8 +62,8 @@ export default function TenantsList({ apiKey }: { apiKey: string }) {
       
       setEditingId(null);
       fetchTenants(); // refresh list
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Request failed");
     }
   };
 

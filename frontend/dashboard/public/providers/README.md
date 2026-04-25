@@ -1,19 +1,22 @@
 # Provider Icons
 
-Drop custom provider SVGs here. Filenames must match `ProviderType` values:
+Static brand SVGs for use outside the React tree (email templates, OG images,
+public marketing pages). The dashboard does **not** read from this folder —
+`src/components/ui/provider-icon.tsx` inlines the brand path data so it can
+recolor based on connection status (`active` / `inactive` / `error`).
 
-- `sendgrid.svg`
-- `mailgun.svg`
-- `ses.svg`
-- `postmark.svg`
-- `resend.svg`
+Files here mirror the inline data and are sourced from
+[simple-icons](https://simpleicons.org) (Postmark crafted manually since it
+isn't in the simple-icons set):
 
-SMTP has no brand — the `ProviderIcon` component falls back to a Lucide `Server` icon.
+- `sendgrid.svg` — `#1A82E2`
+- `mailgun.svg`  — `#F06B66`
+- `ses.svg`      — `#FF9900`
+- `postmark.svg` — `#FFDE00`
+- `resend.svg`   — `#000000`
 
-Guidelines:
-- Square viewBox, ideally 24×24 or 48×48
-- Single-color or full-brand both work; component does not recolor
-- Keep files small (<5KB). Inline paths, no embedded bitmaps.
+SMTP has no brand — the `ProviderIcon` component falls back to a Lucide
+`Server` icon and is not represented here.
 
-Consumed by `src/components/ui/provider-icon.tsx`. Missing/broken files fall
-back to a Lucide `Mail` icon automatically.
+When updating a brand mark, update **both** the SVG file here and the inline
+`paths` entry in `BRAND` inside `provider-icon.tsx`.

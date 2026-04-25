@@ -220,6 +220,7 @@ export default function WebhooksPage() {
                   className={cn(
                     "hover:bg-muted/20 transition-colors",
                     i < webhooksList.length - 1 && "border-b border-border/50",
+                    !w.is_active && "opacity-55",
                   )}
                 >
                   <td className="px-4 py-2.5">

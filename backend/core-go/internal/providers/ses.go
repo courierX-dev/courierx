@@ -218,6 +218,54 @@ func (p *SESProvider) signV4(req *http.Request, body []byte) {
 	))
 }
 
+// Verify performs a signed GET /v2/email/account call to confirm that the
+// credentials and region are valid. A 200 response means the credentials work.
+// A 403 with "AccessDenied" means the signature was accepted but the IAM
+// principal lacks ses:GetAccount — the credentials themselves are still valid,
+// so this is treated as success. Any signature/credential failure surfaces as
+// an error.
+func (p *SESProvider) Verify(ctx context.Context) error {
+	endpoint := fmt.Sprintf("https://email.%s.amazonaws.com/v2/email/account", p.region)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("ses: create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	p.signV4(req, nil)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("ses: connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	if resp.StatusCode == http.StatusForbidden && strings.Contains(bodyStr, "AccessDenied") {
+		return nil
+	}
+
+	switch resp.StatusCode {
+	case http.StatusForbidden, http.StatusUnauthorized:
+		return fmt.Errorf("invalid AWS credentials (HTTP %d): %s", resp.StatusCode, truncateSES(bodyStr, 200))
+	default:
+		return fmt.Errorf("unexpected response (HTTP %d): %s", resp.StatusCode, truncateSES(bodyStr, 200))
+	}
+}
+
+func truncateSES(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 func (p *SESProvider) Name() string { return "ses" }
 
 func (p *SESProvider) ValidateConfig() error {

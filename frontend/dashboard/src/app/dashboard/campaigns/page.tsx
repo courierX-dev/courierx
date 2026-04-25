@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState, useMemo, useEffect } from "react"
+import { Suspense, useState, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { Search, Mail } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -36,7 +36,8 @@ function CampaignsPageInner() {
   const searchParams = useSearchParams()
   const initialSubject = searchParams.get("subject") ?? ""
   const [search, setSearch] = useState("")
-  const [openCampaign, setOpenCampaign] = useState<CampaignGroup | null>(null)
+  const [userOpened, setUserOpened] = useState<CampaignGroup | null>(null)
+  const [urlDismissed, setUrlDismissed] = useState(false)
   const { data: emails, isLoading, isError, refetch } = useEmails({ per_page: 200 })
 
   const campaigns = useMemo(() => {
@@ -103,11 +104,16 @@ function CampaignsPageInner() {
     )
   }, [emails])
 
-  useEffect(() => {
-    if (!initialSubject || openCampaign) return
-    const match = campaigns.find((c) => c.subject === initialSubject)
-    if (match) setOpenCampaign(match)
-  }, [initialSubject, campaigns, openCampaign])
+  const urlMatch = useMemo(() => {
+    if (!initialSubject || urlDismissed) return null
+    return campaigns.find((c) => c.subject === initialSubject) ?? null
+  }, [initialSubject, campaigns, urlDismissed])
+
+  const openCampaign = userOpened ?? urlMatch
+  const closeCampaign = () => {
+    setUserOpened(null)
+    if (urlMatch) setUrlDismissed(true)
+  }
 
   const filtered = useMemo(() => {
     if (!search) return campaigns
@@ -122,7 +128,6 @@ function CampaignsPageInner() {
   // Totals for stat cards
   const totalSent = campaigns.reduce((s, c) => s + c.totalSent, 0)
   const totalDelivered = campaigns.reduce((s, c) => s + c.delivered, 0)
-  const totalBounced = campaigns.reduce((s, c) => s + c.bounced, 0)
   const avgDeliveryRate = totalSent > 0 ? (totalDelivered / totalSent) * 100 : 0
 
   return (
@@ -216,7 +221,7 @@ function CampaignsPageInner() {
                 return (
                   <tr
                     key={c.subject}
-                    onClick={() => setOpenCampaign(c)}
+                    onClick={() => setUserOpened(c)}
                     className={cn(
                       "hover:bg-muted/20 transition-colors cursor-pointer",
                       i < filtered.length - 1 && "border-b border-border/50",
@@ -298,7 +303,7 @@ function CampaignsPageInner() {
 
       <CampaignDetailDialog
         campaign={openCampaign}
-        onOpenChange={(open) => !open && setOpenCampaign(null)}
+        onOpenChange={(open) => !open && closeCampaign()}
       />
     </PageShell>
   )

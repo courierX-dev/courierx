@@ -134,6 +134,7 @@ export default function DomainsPage() {
                   className={cn(
                     "hover:bg-muted/20 transition-colors",
                     i < domainsList.length - 1 && "border-b border-border/50",
+                    d.status === "failed" && "opacity-55",
                   )}
                 >
                   <td className="px-4 py-3 font-mono text-sm">{d.domain}</td>

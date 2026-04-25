@@ -145,17 +145,22 @@ export default function RoutingPage() {
             </div>
           ) : (
             <div className="divide-y divide-border/50">
-              {connList.map((p) => (
+              {connList.map((p) => {
+                const isActive = p.status === "active"
+                return (
                 <div
                   key={p.id}
                   onClick={() => setProviderDetail(p)}
-                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/20"
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/20",
+                    !isActive && "opacity-60",
+                  )}
                 >
                   <span className="text-xs font-mono text-muted-foreground/60 w-4 text-center">
                     {p.priority}
                   </span>
                   <DotIndicator status={p.status} />
-                  <ProviderIcon provider={p.provider} size={16} />
+                  <ProviderIcon provider={p.provider} size={16} status={isActive ? "active" : "inactive"} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{p.display_name ?? p.provider}</p>
                     <p className="text-[10px] font-mono text-muted-foreground">
@@ -172,7 +177,8 @@ export default function RoutingPage() {
                     {p.success_rate != null ? `${p.success_rate}%` : "—"}
                   </span>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

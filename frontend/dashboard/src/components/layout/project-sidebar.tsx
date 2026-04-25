@@ -5,11 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect } from "react"
 import {
   LayoutDashboard,
-  Send,
-  GitBranch,
-  FileEdit,
   Users,
-  List,
   Plug,
   Settings,
   ChevronDown,

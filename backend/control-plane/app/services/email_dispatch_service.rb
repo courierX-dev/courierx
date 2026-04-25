@@ -52,10 +52,16 @@ class EmailDispatchService
       return { success: false, error: "Recipient is suppressed", email: email }
     end
 
-    # 3b. Cloud plan gate — no-op in OSS; 500ms fail-open HTTP in cloud mode.
-    limit = CloudClient.check_send_allowed!(tenant: @tenant, count: 1)
-    if limit.is_a?(Array) && limit.first == :denied
-      return { success: false, error: "plan_limit_exceeded: #{limit.last}" }
+    # 3b. Plan gate — only metered segments hit the cloud limit checker.
+    # `byok` tenants pay their own provider and CourierX never owes for the
+    # send, so they're unmetered. `demo` (free trial) and `managed` (paid plan)
+    # are the metered segments. In OSS (no cloud service), the feature flag is
+    # off and this is a no-op regardless of mode.
+    if CourierX::Edition.feature?(:billing_enforcement) && @tenant.mode != "byok"
+      limit = CloudClient.check_send_allowed!(tenant: @tenant, count: 1)
+      if limit.is_a?(Array) && limit.first == :denied
+        return { success: false, error: "plan_limit_exceeded: #{limit.last}" }
+      end
     end
 
     # 4+5. Create email record and outbox event atomically. A crash between the

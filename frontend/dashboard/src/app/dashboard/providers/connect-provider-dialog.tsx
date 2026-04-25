@@ -235,9 +235,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
                   "hover:bg-muted/40 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/30",
                 )}
               >
-                <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0">
-                  <ProviderIcon provider={p.id} size={18} />
-                </div>
+                <ProviderIcon provider={p.id} size={18} chip />
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium">{p.name}</span>
                   <span className="text-[11px] text-muted-foreground mt-0.5">{p.description}</span>

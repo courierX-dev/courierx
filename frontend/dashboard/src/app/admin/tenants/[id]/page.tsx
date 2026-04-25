@@ -167,8 +167,8 @@ export default function TenantDetailPage() {
                     const data = await res.json();
                     localStorage.setItem("auth_token", data.token);
                     window.location.href = "/dashboard";
-                  } catch (err: any) {
-                    alert(err.message);
+                  } catch (err: unknown) {
+                    alert(err instanceof Error ? err.message : "Request failed");
                   }
                 }}
                 className="px-4 py-2 bg-zinc-800 text-white hover:bg-zinc-700 transition-colors rounded-lg text-sm font-medium border border-zinc-700"
@@ -197,8 +197,8 @@ export default function TenantDetailPage() {
                     });
                     if (!res.ok) throw new Error("Failed to suspend tenant");
                     setTenant({ ...tenant, status: "suspended" });
-                  } catch (err: any) {
-                    alert(err.message);
+                  } catch (err: unknown) {
+                    alert(err instanceof Error ? err.message : "Request failed");
                   }
                 }}
                 className="px-4 py-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors rounded-lg text-sm font-medium border border-red-500/20"

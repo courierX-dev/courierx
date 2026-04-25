@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,13 +13,10 @@ import { SectionError } from "@/components/dashboard/inline-error"
 export default function ProfilePage() {
   const { data: tenant, isLoading, isError, refetch } = useCurrentTenant()
   const updateMutation = useUpdateProfile()
-  const [name, setName]   = useState("")
+  const [nameOverride, setNameOverride] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
-
-  // Sync name input when tenant data loads
-  useEffect(() => {
-    if (tenant?.name) setName(tenant.name)
-  }, [tenant?.name])
+  const name = nameOverride ?? tenant?.name ?? ""
+  const setName = (v: string) => setNameOverride(v)
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()

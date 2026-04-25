@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAdminStore } from "./store";
-import { Copy, Plus, Save, Terminal, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import TenantsList from "./tenants/page";
 
 export default function AdminPortal() {

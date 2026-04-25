@@ -54,9 +54,12 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-              <ProviderIcon provider={conn.provider} size={20} />
-            </div>
+            <ProviderIcon
+              provider={conn.provider}
+              size={20}
+              chip
+              status={conn.status === "active" ? "active" : conn.status === "degraded" ? "inactive" : "error"}
+            />
             <div>
               <DialogTitle>{conn.display_name ?? provider}</DialogTitle>
               <DialogDescription>{provider} · {conn.mode.toUpperCase()}</DialogDescription>

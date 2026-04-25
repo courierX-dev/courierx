@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, use } from "react"
+import { useState, use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Save, Eye, Loader2 } from "lucide-react"
@@ -19,36 +19,50 @@ import { SectionError } from "@/components/dashboard/inline-error"
 import { useTemplate, useUpdateTemplate } from "@/hooks/use-templates"
 import { toast } from "sonner"
 
+type TemplateData = NonNullable<ReturnType<typeof useTemplate>["data"]>
+
 export default function TemplateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const router = useRouter()
   const { data: template, isLoading, isError, refetch } = useTemplate(id)
+
+  if (isLoading) {
+    return (
+      <PageShell maxWidth="narrow">
+        <div className="space-y-3">
+          <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+          <div className="h-8 bg-muted animate-pulse rounded" />
+          <div className="h-8 bg-muted animate-pulse rounded" />
+          <div className="h-48 bg-muted animate-pulse rounded" />
+        </div>
+      </PageShell>
+    )
+  }
+
+  if (isError || !template) {
+    return (
+      <PageShell>
+        <SectionError message="Failed to load template" onRetry={refetch} />
+      </PageShell>
+    )
+  }
+
+  return <TemplateForm key={template.id ?? id} id={id} template={template} />
+}
+
+function TemplateForm({ id, template }: { id: string; template: TemplateData }) {
+  const router = useRouter()
   const updateMutation = useUpdateTemplate()
 
   const [showPreview, setShowPreview] = useState(false)
   const [form, setForm] = useState({
-    name: "",
-    description: "",
-    subject: "",
-    html_body: "",
-    text_body: "",
-    category: "",
-    status: "draft",
+    name:        template.name ?? "",
+    description: template.description ?? "",
+    subject:     template.subject ?? "",
+    html_body:   template.html_body ?? "",
+    text_body:   template.text_body ?? "",
+    category:    template.category ?? "",
+    status:      template.status ?? "draft",
   })
-
-  useEffect(() => {
-    if (template) {
-      setForm({
-        name:        template.name ?? "",
-        description: template.description ?? "",
-        subject:     template.subject ?? "",
-        html_body:   template.html_body ?? "",
-        text_body:   template.text_body ?? "",
-        category:    template.category ?? "",
-        status:      template.status ?? "draft",
-      })
-    }
-  }, [template])
 
   function set(field: string) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -86,27 +100,6 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
     )
   }
 
-  if (isLoading) {
-    return (
-      <PageShell maxWidth="narrow">
-        <div className="space-y-3">
-          <div className="h-6 w-48 bg-muted animate-pulse rounded" />
-          <div className="h-8 bg-muted animate-pulse rounded" />
-          <div className="h-8 bg-muted animate-pulse rounded" />
-          <div className="h-48 bg-muted animate-pulse rounded" />
-        </div>
-      </PageShell>
-    )
-  }
-
-  if (isError) {
-    return (
-      <PageShell>
-        <SectionError message="Failed to load template" onRetry={refetch} />
-      </PageShell>
-    )
-  }
-
   return (
     <PageShell maxWidth="narrow">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -117,10 +110,8 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-base font-semibold tracking-tight">{template?.name}</h1>
-        {template && (
-          <div className="text-[10px] text-muted-foreground">v{template.version}</div>
-        )}
+        <h1 className="text-base font-semibold tracking-tight">{template.name}</h1>
+        <div className="text-[10px] text-muted-foreground">v{template.version}</div>
       </div>
 
       <form onSubmit={handleSave} className="space-y-4">
@@ -212,7 +203,7 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
           </Select>
         </div>
 
-        {template?.variables && template.variables.length > 0 && (
+        {template.variables && template.variables.length > 0 && (
           <div className="space-y-1.5">
             <Label className="text-xs">Variables</Label>
             <div className="rounded-md border border-border p-3 space-y-1.5">
