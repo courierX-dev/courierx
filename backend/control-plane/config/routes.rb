@@ -11,6 +11,8 @@ Rails.application.routes.draw do
   # api_only Rails strips cookies/sessions from the global middleware stack,
   # so give the Web mount its own Rack::Session::Cookie for CSRF + flash.
   # (Sidekiq 7 dropped the Sinatra-based Sidekiq::Web.set :sessions API.)
+  # Rack 3 moved session middleware into the rack-session gem; not autoloaded.
+  require "rack/session/cookie"
   Sidekiq::Web.use Rack::Session::Cookie,
     secret:    Rails.application.secret_key_base,
     same_site: :lax,
@@ -46,8 +48,11 @@ Rails.application.routes.draw do
       post "webhooks/sendgrid", to: "provider_webhooks/sendgrid#create"
       post "webhooks/mailgun",  to: "provider_webhooks/mailgun#create"
       post "webhooks/ses",      to: "provider_webhooks/ses#create"
-      post "webhooks/resend",   to: "provider_webhooks/resend#create"
-      post "webhooks/postmark", to: "provider_webhooks/postmark#create"
+      # Resend & Postmark are BYOK-per-tenant — each connection has its own
+      # webhook signing secret, so the URL embeds a per-connection token that
+      # tells us which ProviderConnection to look up before we verify the body.
+      post "webhooks/resend/:token",   to: "provider_webhooks/resend#create",   as: :resend_webhook
+      post "webhooks/postmark/:token", to: "provider_webhooks/postmark#create", as: :postmark_webhook
 
       # ── Health check (public) ──
       get "health", to: "health#show"

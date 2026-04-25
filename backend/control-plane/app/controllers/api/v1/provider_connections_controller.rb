@@ -60,11 +60,11 @@ module Api
         # Never expose the encrypted_* columns directly to clients.
         params.permit(:provider, :mode, :status, :display_name, :weight, :priority,
                        :region, :smtp_host, :smtp_port,
-                       :api_key, :secret)
+                       :api_key, :secret, :webhook_secret)
       end
 
       def connection_json(c)
-        {
+        json = {
           id: c.id, provider: c.provider, mode: c.mode, status: c.status,
           display_name: c.display_name, weight: c.weight, priority: c.priority,
           success_rate: c.success_rate, avg_latency_ms: c.avg_latency_ms,
@@ -73,6 +73,17 @@ module Api
           region: c.region, smtp_host: c.smtp_host, smtp_port: c.smtp_port,
           created_at: c.created_at
         }
+
+        # Webhook setup info — only meaningful for providers that send delivery
+        # webhooks back to us (Resend, Postmark). The URL is unique per
+        # connection; the tenant pastes it into their provider dashboard, then
+        # pastes the resulting signing secret back via PATCH webhook_secret.
+        if %w[resend postmark].include?(c.provider)
+          json[:webhook_url]            = c.webhook_url(base_url: ENV.fetch("PUBLIC_API_URL", "https://api.courierx.dev"))
+          json[:webhook_secret_present] = c.encrypted_webhook_secret.present?
+        end
+
+        json
       end
     end
   end

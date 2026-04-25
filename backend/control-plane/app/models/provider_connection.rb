@@ -25,9 +25,10 @@ class ProviderConnection < ApplicationRecord
   # Values are encrypted with AES-256 (ActiveSupport::MessageEncryptor) before save
   # and decrypted transparently on read. The raw plaintext is never persisted.
 
-  attr_writer :api_key, :secret
+  attr_writer :api_key, :secret, :webhook_secret
 
-  before_save :encrypt_credentials
+  before_validation :ensure_webhook_token, on: :create
+  before_save       :encrypt_credentials
 
   def api_key
     @api_key ||= decrypt_field(encrypted_api_key)
@@ -35,6 +36,24 @@ class ProviderConnection < ApplicationRecord
 
   def secret
     @secret ||= decrypt_field(encrypted_secret)
+  end
+
+  # Provider-specific webhook signing secret (Resend's `whsec_...`,
+  # Postmark Basic Auth password, etc.). Tenants paste it in after creating
+  # the webhook in their provider's dashboard. Stored encrypted at rest.
+  def webhook_secret
+    @webhook_secret ||= decrypt_field(encrypted_webhook_secret)
+  end
+
+  # Public webhook URL we hand the tenant. They paste this into their provider
+  # dashboard. Built on read so a base-URL change doesn't require a backfill.
+  def webhook_url(base_url: ENV["PUBLIC_API_URL"])
+    return nil if webhook_token.blank? || base_url.blank?
+
+    case provider
+    when "resend"   then "#{base_url.chomp('/')}/api/v1/webhooks/resend/#{webhook_token}"
+    when "postmark" then "#{base_url.chomp('/')}/api/v1/webhooks/postmark/#{webhook_token}"
+    end
   end
 
   # ── Public helpers ──────────────────────────────────────────────────────────
@@ -45,9 +64,15 @@ class ProviderConnection < ApplicationRecord
 
   private
 
+  def ensure_webhook_token
+    return if webhook_token.present?
+    self.webhook_token = SecureRandom.urlsafe_base64(24).tr("-_", "ab")
+  end
+
   def encrypt_credentials
-    self.encrypted_api_key = encryptor.encrypt_and_sign(@api_key) if @api_key.present?
-    self.encrypted_secret  = encryptor.encrypt_and_sign(@secret)  if @secret.present?
+    self.encrypted_api_key        = encryptor.encrypt_and_sign(@api_key)        if @api_key.present?
+    self.encrypted_secret         = encryptor.encrypt_and_sign(@secret)         if @secret.present?
+    self.encrypted_webhook_secret = encryptor.encrypt_and_sign(@webhook_secret) if @webhook_secret.present?
   end
 
   def decrypt_field(value)

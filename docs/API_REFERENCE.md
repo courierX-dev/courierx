@@ -443,16 +443,49 @@ POST /provider_connections
 }
 ```
 
+**Request (Resend):**
+```json
+{
+  "provider": "resend",
+  "display_name": "Resend Production",
+  "api_key": "re_xxxxxxxxxxxxx"
+}
+```
+
 **Response `201 Created`:**
 ```json
 {
   "id": "uuid",
   "provider": "sendgrid",
   "display_name": "Primary SendGrid Account",
-  "status": "verified",
+  "status": "active",
   "created_at": "2026-04-19T12:00:00Z"
 }
 ```
+
+For `resend` and `postmark` connections the response also includes:
+
+```json
+{
+  "webhook_url": "https://api.courierx.dev/api/v1/webhooks/resend/<token>",
+  "webhook_secret_present": false
+}
+```
+
+`webhook_url` is the URL you paste into your provider's dashboard so delivery
+events route back to CourierX. After you create the webhook there, copy the
+provider's signing secret and PATCH it onto the connection:
+
+```
+PATCH /provider_connections/:id
+{ "webhook_secret": "whsec_xxxxxxxx" }   # for Resend
+{ "webhook_secret": "your-basic-auth-password" }   # for Postmark
+```
+
+`webhook_secret_present: true` means we have it stored. Without it, inbound
+webhooks for that connection are rejected with `401 Unauthorized` and emails
+will never transition past `sent` to `delivered`. See
+[Inbound webhook setup (BYOK)](INBOUND_WEBHOOKS.md) for the full step-by-step.
 
 ---
 
