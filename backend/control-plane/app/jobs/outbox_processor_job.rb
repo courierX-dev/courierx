@@ -75,11 +75,29 @@ class OutboxProcessorJob
     payload[:replyTo]        = email.reply_to                   if email.reply_to.present?
     payload[:idempotencyKey] = event.payload["idempotency_key"] if event.payload["idempotency_key"].present?
 
-    # Include per-tenant BYOK provider chain if configured.
-    # Demo-mode tenants skip BYOK injection — Go falls back to its global
-    # router, which uses the mock provider when no real ENV providers are set.
+    # Resolve which connections are eligible RIGHT NOW (cap usage and provider
+    # health change between dispatch and processing). Demo-mode skips this and
+    # uses Go's mock provider.
+    eligible_connections = []
     unless tenant.mode == "demo"
-      routes = build_provider_routes(tenant, email)
+      resolution = EligibleConnectionsResolver.call(
+        tenant:     tenant,
+        from_email: email.from_email,
+        tags:       email.tags
+      )
+
+      if resolution.empty?
+        # Eligibility evaporated since dispatch — disconnected provider, all
+        # caps hit, etc. This is definitive, not transient.
+        error = "no_eligible_provider:#{resolution.reason}"
+        Rails.logger.warn "[OutboxProcessor] #{error} for email #{email.id}"
+        email.mark_failed!(error: error)
+        event.update!(status: "dead", last_error: error)
+        return
+      end
+
+      eligible_connections = resolution.eligible
+      routes = build_routes_from_connections(eligible_connections)
       payload[:providers] = routes if routes.any?
     end
 
@@ -100,8 +118,17 @@ class OutboxProcessorJob
     if response.success?
       Rails.logger.info "[OutboxProcessor] Success! Response body: #{response.body}"
       body = JSON.parse(response.body)
-      # Go returns { "messageId": "...", "provider": "sendgrid", ... }
-      provider_conn = tenant.provider_connections.active.find_by(provider: body["provider"])
+      # Go returns { "messageId": "...", "provider": "sendgrid", "connectionId"?: "..." }.
+      # Prefer connectionId (post Go three-bucket-classification change). Until
+      # Go echoes that, match the first eligible connection of the returned
+      # provider type — Go tries the chain in order, so first match is correct.
+      provider_conn =
+        if body["connectionId"].present?
+          tenant.provider_connections.find_by(id: body["connectionId"])
+        else
+          eligible_connections.find { |c| c.provider == body["provider"] } ||
+            tenant.provider_connections.active.find_by(provider: body["provider"])
+        end
       email.mark_sent!(
         provider_message_id: body["messageId"],
         provider_connection: provider_conn
@@ -148,52 +175,21 @@ class OutboxProcessorJob
     name.present? ? "#{name} <#{email_addr}>" : email_addr
   end
 
-  # Builds the provider failover chain from the tenant's routing rules.
-  # Returns an array of Route hashes in the format Go's types.Route expects.
-  # Returns [] if no routing rules are configured (Go falls back to ENV providers).
-  def build_provider_routes(tenant, email)
-    rule = find_routing_rule(tenant, email)
-    return [] unless rule
-
-    rule.routing_rule_providers
-        .includes(:provider_connection)
-        .by_priority
-        .filter_map do |rrp|
-          conn = rrp.provider_connection
-          next unless conn.status == "active"
-
-          {
-            priority: rrp.priority,
-            role:     rrp.priority == 1 ? "primary" : "fallback",
-            provider: {
-              type:   conn.provider,
-              config: provider_credentials(conn)
-            }
-          }
-        end
-  end
-
-  # Selects the most specific active routing rule for this email.
-  # Precedence: tag match → from-domain match → default rule → nil
-  def find_routing_rule(tenant, email)
-    rules = tenant.routing_rules
-                  .active
-                  .includes(routing_rule_providers: :provider_connection)
-
-    from_domain = email.from_email.split("@").last
-
-    # 1. Tag match (most specific)
-    if email.tags.any?
-      tagged = rules.find { |r| r.match_tag.present? && email.tags.include?(r.match_tag) }
-      return tagged if tagged
+  # Builds the Go-format providers[] array from the resolver's ordered
+  # eligible-connection list. Each route carries the connection id so Go
+  # can echo it back as connectionId on success (future change).
+  def build_routes_from_connections(connections)
+    connections.each_with_index.map do |conn, idx|
+      {
+        id:       conn.id,
+        priority: idx + 1,
+        role:     idx.zero? ? "primary" : "fallback",
+        provider: {
+          type:   conn.provider,
+          config: provider_credentials(conn)
+        }
+      }
     end
-
-    # 2. From-domain match
-    domain_rule = rules.find { |r| r.match_from_domain.present? && r.match_from_domain == from_domain }
-    return domain_rule if domain_rule
-
-    # 3. Default rule
-    rules.find(&:is_default?)
   end
 
   # Returns the credential config hash for a provider connection in the

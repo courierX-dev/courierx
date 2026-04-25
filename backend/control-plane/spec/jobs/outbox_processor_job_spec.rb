@@ -127,6 +127,17 @@ RSpec.describe OutboxProcessorJob do
     let(:routing_rule) do
       create(:routing_rule, tenant: tenant, is_active: true, is_default: true, name: "default")
     end
+    # The resolver requires a verified domain + a verified DPV row for this
+    # connection. Without these the email rejects pre-flight and never reaches Go.
+    let!(:byok_domain) do
+      create(:domain, tenant: tenant, domain: "example.com", status: "verified")
+    end
+    let!(:dpv) do
+      create(:domain_provider_verification,
+             domain:              byok_domain,
+             provider_connection: provider_conn,
+             status:              "verified")
+    end
 
     before do
       create(:routing_rule_provider,

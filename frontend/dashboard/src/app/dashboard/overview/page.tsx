@@ -14,7 +14,7 @@ import type { Period } from "@/services/dashboard.service"
 export default function OverviewPage() {
   const [period, setPeriod] = useState<Period>("30d")
   const { data: metrics, isLoading, isError } = useDashboardMetrics(period)
-  const { data: recentEmails, isLoading: emailsLoading, isError: emailsError } = useEmails({ per_page: 10 })
+  const { data: recentEmails, isLoading: emailsLoading, isError: emailsError, refetch: refetchEmails } = useEmails({ per_page: 10 })
 
   /* Chart data from API */
   const chartData = metrics?.daily?.map((d) => ({

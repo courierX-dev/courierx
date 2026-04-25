@@ -78,16 +78,26 @@ RSpec.describe EmailDispatchService do
   # ── Domain verification ───────────────────────────────────────────────────
 
   describe "#call — unverified from domain" do
-    it "returns success: false when the from_email domain is not verified" do
+    let(:tenant) { create(:tenant, :byok) }
+
+    it "returns success: false when the from_email domain is not verified on the account" do
       domain.update!(status: "pending")
       result = described_class.call(tenant: tenant, params: params)
       expect(result[:success]).to be false
-      expect(result[:error]).to match(/not a verified domain/)
+      expect(result[:error]).to match(/isn't verified on this account/)
     end
 
     it "does not create any Email record for an unverified domain" do
       domain.update!(status: "pending")
       expect { described_class.call(tenant: tenant, params: params) }.not_to change(Email, :count)
+    end
+
+    it "rejects when the domain is verified but no provider connection has it verified" do
+      # Domain is verified on our side, but no DomainProviderVerification rows
+      # exist — the resolver has nowhere to send from.
+      result = described_class.call(tenant: tenant, params: params)
+      expect(result[:success]).to be false
+      expect(result[:error]).to match(/No connected provider has/)
     end
   end
 

@@ -35,14 +35,21 @@ class EmailDispatchService
       return { success: true, email: existing, idempotent: true } if existing
     end
 
-    # 2. Verify from_email belongs to a verified tenant domain.
-    #    Demo-mode tenants skip this gate — they send through the mock provider
-    #    in the Go engine so new users can exercise the send flow immediately
-    #    after signup, before any DNS setup.
+    # 2. Pre-flight: confirm at least one provider connection can send this
+    #    message. The resolver enforces (a) tenant owns the from_email's domain,
+    #    (b) at least one connected provider has the domain verified on its
+    #    side, (c) connections are healthy, (d) quotas have headroom.
+    #    Demo-mode skips this gate — those tenants use Go's mock provider so
+    #    new accounts can exercise the send flow before any DNS setup.
     unless @tenant.mode == "demo"
-      from_domain = @params[:from_email]&.split("@")&.last&.downcase
-      unless @tenant.domains.where(status: "verified").exists?(["LOWER(domain) = ?", from_domain])
-        return { success: false, error: "from_email domain '#{from_domain}' is not a verified domain on this account" }
+      resolution = EligibleConnectionsResolver.call(
+        tenant:     @tenant,
+        from_email: @params[:from_email],
+        tags:       @params[:tags] || []
+      )
+
+      if resolution.empty?
+        return { success: false, error: preflight_error(resolution.reason, @params[:from_email]) }
       end
     end
 
@@ -87,6 +94,26 @@ class EmailDispatchService
   end
 
   private
+
+  # Maps a resolver rejection reason to a tenant-facing error string.
+  # Phrased in the marketing voice — direct, specific, actionable.
+  def preflight_error(reason, from_email)
+    from_domain = from_email.to_s.split("@").last
+    case reason
+    when :invalid_from_email
+      "from_email is missing or malformed"
+    when :unverified_domain
+      "Sending domain '#{from_domain}' isn't verified on this account. Add it under Domains and complete DNS verification before sending."
+    when :no_verified_provider
+      "No connected provider has '#{from_domain}' verified. Verify the domain on at least one of your connected providers — see the domain's setup panel for each provider's DNS records."
+    when :all_unhealthy
+      "All providers eligible for '#{from_domain}' are currently degraded or inactive. Check Provider Connections."
+    when :all_over_cap
+      "All eligible providers for '#{from_domain}' have hit their cap for this period. Increase a cap or connect another provider."
+    else
+      "Unable to send from '#{from_domain}'."
+    end
+  end
 
   def resolve_template!
     template = @tenant.email_templates.find(@params[:template_id])

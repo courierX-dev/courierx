@@ -14,3 +14,12 @@
 # ActiveSupport::Inflector.inflections(:en) do |inflect|
 #   inflect.acronym "RESTful"
 # end
+
+# Rails' default inflector treats "quota" as uncountable. It is in fact
+# countable — "I have three quotas" — and the default mis-inflection makes
+# models like ProviderQuota infer their table name as "provider_quota"
+# (singular) when the convention is "provider_quotas".
+ActiveSupport::Inflector.inflections(:en) do |inflect|
+  inflect.plural   "quota", "quotas"
+  inflect.singular "quotas", "quota"
+end

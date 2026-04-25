@@ -7,6 +7,9 @@ class ProviderConnection < ApplicationRecord
   has_many   :routing_rule_providers, dependent: :destroy
   has_many   :routing_rules, through: :routing_rule_providers
   has_many   :emails
+  has_one    :provider_quota, dependent: :destroy
+  has_many   :provider_quota_usages, dependent: :destroy
+  has_many   :domain_provider_verifications, dependent: :destroy
 
   validates :provider, presence: true, inclusion: { in: PROVIDERS }
   validates :mode,     presence: true, inclusion: { in: MODES }
