@@ -1,12 +1,11 @@
 #!/bin/bash -e
 
-# Before booting the server: run schema migrations, then data migrations.
-# data_migrate's combined task runs them in interleaved version order, which
-# is what we want — a data backfill that depends on a column being added by
-# a schema migration of the same day will see the column.
+# Note: this entrypoint is only used by backend/control-plane/Dockerfile (local
+# dev / kamal). Production on Railway uses infra/docker/Dockerfile.rails which
+# has no entrypoint; migrations there run via the Railway Pre-deploy Command
+# (`bundle exec rails db:migrate:with_data`).
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
   ./bin/rails db:prepare
-  ./bin/rails db:migrate:with_data
 fi
 
 exec "${@}"
