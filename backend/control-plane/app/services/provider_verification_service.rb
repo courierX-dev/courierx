@@ -67,7 +67,7 @@ class ProviderVerificationService
     uri = URI.join(go_core_url, "/internal/verify-provider")
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = uri.scheme == "https"
-    http.open_timeout = 5
+    http.open_timeout = 15
     http.read_timeout = 20
 
     request = Net::HTTP::Post.new(uri.path, {
