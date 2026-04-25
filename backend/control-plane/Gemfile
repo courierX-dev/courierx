@@ -27,6 +27,11 @@ gem "faraday", "~> 2.8"
 # Environment Variables
 gem "dotenv", groups: [ :development, :test ]
 
+# Data migrations — versioned, one-shot data backfills tracked separately
+# from schema changes. Adds bin/rails data:migrate (and the combined
+# db:migrate:with_data) so deploys run schema first, then data.
+gem "data_migrate"
+
 # Rate Limiting
 gem "rack-attack"
 

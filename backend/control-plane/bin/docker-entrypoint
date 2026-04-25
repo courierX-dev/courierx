@@ -1,8 +1,12 @@
 #!/bin/bash -e
 
-# If running the rails server then create or migrate existing database
+# Before booting the server: run schema migrations, then data migrations.
+# data_migrate's combined task runs them in interleaved version order, which
+# is what we want — a data backfill that depends on a column being added by
+# a schema migration of the same day will see the column.
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
   ./bin/rails db:prepare
+  ./bin/rails db:migrate:with_data
 fi
 
 exec "${@}"
