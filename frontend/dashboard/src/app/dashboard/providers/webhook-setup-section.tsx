@@ -254,13 +254,10 @@ export function WebhookSetupSection({ conn }: { conn: ProviderConnection }) {
       )}
 
       {wh.last_error && wh.status === "failed" && (
-        <div className="flex items-start gap-2 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-2.5 py-2 text-[11px] text-destructive dark:bg-red-950 dark:border-red-800 dark:text-red-400">
-          <AlertCircle className="h-3.5 w-3.5 mt-px shrink-0" />
-          <div className="space-y-0.5">
-            <div className="font-semibold">{providerName} returned an error</div>
-            <div className="font-mono">{wh.last_error}</div>
-          </div>
-        </div>
+        <ErrorBanner
+          message={wh.last_error}
+          providerName={providerName}
+        />
       )}
 
       <PasteSecretField
@@ -297,6 +294,45 @@ export function WebhookSetupSection({ conn }: { conn: ProviderConnection }) {
           Last synced {new Date(wh.last_synced_at).toLocaleString()}
         </p>
       )}
+    </div>
+  )
+}
+
+function ErrorBanner({
+  message,
+  providerName,
+}: {
+  message: string
+  providerName: string
+}) {
+  // Backend prefixes its own non-provider errors with [config] / [credentials]
+  // so we can show actionable, category-specific copy.
+  const tagged = message.match(/^\[(config|credentials)\]\s*(.+)$/)
+  const category = tagged?.[1] ?? "provider"
+  const body = tagged?.[2] ?? message
+
+  const heading =
+    category === "config"
+      ? "Server isn't configured for webhooks yet"
+      : category === "credentials"
+        ? "Provider credentials aren't set yet"
+        : `${providerName} rejected the request`
+
+  const followUp =
+    category === "config"
+      ? "This is a CourierX-side setup issue, not a Resend / Mailgun / SendGrid problem. Once your admin sets the env var on the worker process and redeploys, click Try again."
+      : category === "credentials"
+        ? "Add or fix the API key on this connection, then click Try again."
+        : `Usually this means the API key is missing a permission or is wrong. After fixing, click Try again.`
+
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-2.5 py-2 text-[11px] text-destructive dark:bg-red-950 dark:border-red-800 dark:text-red-400">
+      <AlertCircle className="h-3.5 w-3.5 mt-px shrink-0" />
+      <div className="space-y-1">
+        <div className="font-semibold">{heading}</div>
+        <div className="font-mono wrap-break-word">{body}</div>
+        <div className="text-[10px] opacity-80 leading-relaxed">{followUp}</div>
+      </div>
     </div>
   )
 }

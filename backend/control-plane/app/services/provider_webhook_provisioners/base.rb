@@ -38,14 +38,20 @@ module ProviderWebhookProvisioners
     def resolve_webhook_url(connection)
       base = public_base_url
       if base.nil?
+        # Sidekiq runs in a separate process from the API on most deploys —
+        # if the operator set PUBLIC_API_URL on the API service but not on
+        # the worker service, this is the error they'll hit. The job logs
+        # the resolved base_url at start so they can see which side is
+        # missing it.
         return [ nil, failure(
-          "Webhook setup needs PUBLIC_API_URL configured on the server. " \
-          "Ask your CourierX admin to set it (e.g. https://api.yourdomain.com)."
+          "Server configuration: PUBLIC_API_URL is not set on the worker process. " \
+          "Set it on the same Railway/Render service that runs Sidekiq, then redeploy.",
+          category: :config
         ) ]
       end
 
       url = connection.webhook_url(base_url: base)
-      return [ nil, failure("Couldn't build a webhook URL for this connection.") ] if url.nil?
+      return [ nil, failure("Couldn't build a webhook URL for this connection.", category: :config) ] if url.nil?
 
       [ url, nil ]
     end
@@ -79,8 +85,12 @@ module ProviderWebhookProvisioners
       { "Content-Type" => "application/json", "Accept" => "application/json" }
     end
 
-    def failure(message)
-      { success: false, status: "failed", error: message }
+    # category: :provider — the third-party API rejected our request
+    #           :config   — our own configuration is wrong (PUBLIC_API_URL etc.)
+    #           :credentials — the BYOK creds on this connection are missing/invalid
+    # Frontend uses this to render the right banner.
+    def failure(message, category: :provider)
+      { success: false, status: "failed", error: message, error_category: category.to_s }
     end
 
     def success(external_id:, signing_secret:, status: "auto")

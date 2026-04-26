@@ -27,8 +27,8 @@ module ProviderWebhookProvisioners
     ].freeze
 
     def provision(connection)
-      return failure("Mailgun API key not set on this connection") if connection.api_key.blank?
-      return failure("Mailgun sending domain not set on this connection") if connection.smtp_host.blank?
+      return failure("Mailgun API key not set on this connection", category: :credentials) if connection.api_key.blank?
+      return failure("Mailgun sending domain not set on this connection", category: :credentials) if connection.smtp_host.blank?
 
       url, err = resolve_webhook_url(connection)
       return err if err

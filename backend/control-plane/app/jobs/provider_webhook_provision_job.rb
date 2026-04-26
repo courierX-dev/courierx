@@ -23,13 +23,23 @@ class ProviderWebhookProvisionJob
     return unless ProviderConnection::AUTO_WEBHOOK_PROVIDERS.include?(connection.provider)
     return unless connection.webhook_auto_managed?
 
+    # Log what the worker actually sees for the public URL config — this
+    # makes the "API service has the env var, worker doesn't" misconfig
+    # diagnosable from worker logs alone.
+    Rails.logger.info(
+      "[WebhookProvision] starting connection=#{connection_id} " \
+      "provider=#{connection.provider} " \
+      "PUBLIC_API_URL=#{ENV['PUBLIC_API_URL'].inspect} " \
+      "RAILWAY_PUBLIC_DOMAIN=#{ENV['RAILWAY_PUBLIC_DOMAIN'].inspect}"
+    )
+
     provisioner = ProviderWebhookProvisioners.for(connection.provider)
     result      = provisioner.provision(connection)
 
     if result[:success]
       apply_success(connection, result)
     else
-      apply_failure(connection, result[:error])
+      apply_failure(connection, result[:error], category: result[:error_category])
     end
   rescue StandardError => e
     Rails.logger.error(
@@ -79,10 +89,10 @@ class ProviderWebhookProvisionJob
     )
   end
 
-  def apply_failure(connection, error)
+  def apply_failure(connection, error, category: nil)
     Rails.logger.warn(
       "[WebhookProvision] connection=#{connection.id} provider=#{connection.provider} " \
-      "tenant=#{connection.tenant_id} failed: #{error}"
+      "tenant=#{connection.tenant_id} category=#{category} failed: #{error}"
     )
     if defined?(Sentry)
       Sentry.capture_message(
@@ -92,9 +102,19 @@ class ProviderWebhookProvisionJob
         extra: { error: error.to_s.truncate(255), connection_id: connection.id }
       )
     end
+    # Encode the category as a prefix on the persisted message so the
+    # frontend can render the right banner without a schema change. Format:
+    # "[category] message". The :provider category is implicit (no prefix)
+    # since that's the most common case and prefixing every provider error
+    # would just be noise.
+    prefixed = case category.to_s
+               when "config", "credentials" then "[#{category}] #{error}"
+               else error.to_s
+               end
+
     connection.update_columns(
       webhook_status:         "failed",
-      webhook_last_error:     error.to_s.truncate(255),
+      webhook_last_error:     prefixed.truncate(255),
       webhook_last_synced_at: Time.current
     )
   end

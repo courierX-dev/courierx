@@ -22,7 +22,7 @@ module ProviderWebhookProvisioners
     BASE_URL = "https://api.postmarkapp.com"
 
     def provision(connection)
-      return failure("Postmark server token not set on this connection") if connection.api_key.blank?
+      return failure("Postmark server token not set on this connection", category: :credentials) if connection.api_key.blank?
 
       url, err = resolve_webhook_url(connection)
       return err if err

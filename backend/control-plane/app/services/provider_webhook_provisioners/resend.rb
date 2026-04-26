@@ -28,7 +28,7 @@ module ProviderWebhookProvisioners
     ].freeze
 
     def provision(connection)
-      return failure("Resend API key not set on this connection") if connection.api_key.blank?
+      return failure("Resend API key not set on this connection", category: :credentials) if connection.api_key.blank?
 
       url, err = resolve_webhook_url(connection)
       return err if err
