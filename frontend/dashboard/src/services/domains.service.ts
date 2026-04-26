@@ -5,12 +5,16 @@ export interface DnsRecord {
   name: string
   value: string
   ttl?: number
+  // True when the contributing source (ownership token or any provider DPV
+  // for this record) is verified. Used to render a check next to the record.
+  verified?: boolean
 }
 
 export interface DomainProviderVerification {
   provider_connection_id: string
   provider: "sendgrid" | "mailgun" | "aws_ses" | "resend" | "postmark" | "smtp" | string
   display_name: string | null
+  priority: number | null
   status: "pending" | "verified" | "failed" | string
   verified_at: string | null
   last_checked_at: string | null

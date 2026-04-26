@@ -70,18 +70,30 @@ module Api
       def domain_json(d)
         dpvs = d.domain_provider_verifications.to_a
 
-        # CourierX ownership record — proves the domain belongs to this tenant
+        # Ownership record is verified once the domain itself rolls up to verified
+        # (any DPV verifying flips the domain in DomainProviderPollJob).
         ownership_record = {
-          type:  "TXT",
-          name:  "_courierx-verification.#{d.domain}",
-          value: "courierx-verify=#{d.verification_token}",
-          ttl:   3600
+          type:     "TXT",
+          name:     "_courierx-verification.#{d.domain}",
+          value:    "courierx-verify=#{d.verification_token}",
+          ttl:      3600,
+          verified: d.status == "verified"
         }
 
-        # Merged DNS bundle: ownership + every provider's required records,
-        # deduplicated on (type, name, value).
-        all_records = [ownership_record] + dpvs.flat_map { |dpv| dpv.records.map(&:symbolize_keys) }
-        unified = all_records.uniq { |r| [r[:type], r[:name], r[:value]] }
+        # Per-provider records inherit the verified flag from their source DPV.
+        # When the same record is contributed by multiple providers (common for
+        # SPF includes), it counts as verified if ANY contributor verified it.
+        provider_records = dpvs.flat_map do |dpv|
+          dpv.records.map { |r| r.symbolize_keys.merge(verified: dpv.status == "verified") }
+        end
+
+        unified = (provider_records + [ownership_record])
+                    .group_by { |r| [r[:type], r[:name], r[:value]] }
+                    .map { |_, group| group.first.merge(verified: group.any? { |r| r[:verified] }) }
+
+        # Pin ownership first so it sits at the top of the modal regardless of
+        # provider record ordering.
+        unified = unified.partition { |r| r[:name] == ownership_record[:name] }.flatten(1)
 
         {
           id:                 d.id,
@@ -94,20 +106,22 @@ module Api
           created_at:         d.created_at,
           dns_records:        unified,
           providers:          dpvs.map { |dpv|
+            conn = dpv.provider_connection
             {
               # `provider_connection_id` and `display_name` distinguish two
               # connections of the same provider type ("Resend Production" vs
               # "Resend Marketing") in the multi-account world.
               provider_connection_id: dpv.provider_connection_id,
               provider:               dpv.provider,
-              display_name:           dpv.provider_connection&.display_name,
+              display_name:           conn&.display_name,
+              priority:               conn&.priority,
               status:                 dpv.status,
               verified_at:            dpv.verified_at,
               last_checked_at:        dpv.last_checked_at,
               error:                  dpv.error,
               external_domain_id:     dpv.external_domain_id
             }
-          }
+          }.sort_by { |p| [p[:priority] || Float::INFINITY, p[:display_name] || ""] }
         }
       end
     end

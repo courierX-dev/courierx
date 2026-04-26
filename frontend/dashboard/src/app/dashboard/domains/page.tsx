@@ -93,10 +93,28 @@ function DnsRecordCard({ record }: { record: DnsRecord }) {
   }
 
   return (
-    <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1">
-      <div className="flex gap-2 text-[11px] font-mono">
-        <span className="text-muted-foreground w-14 shrink-0">Type</span>
-        <span className="break-all">{record.type}</span>
+    <div
+      className={cn(
+        "rounded-md border p-3 space-y-1",
+        record.verified
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-border bg-muted/30",
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2 text-[11px] font-mono">
+          <span className="text-muted-foreground w-14 shrink-0">Type</span>
+          <span className="break-all">{record.type}</span>
+        </div>
+        {record.verified && (
+          <span
+            className="flex items-center gap-1 text-[10px] font-medium text-emerald-500"
+            aria-label="Detected"
+          >
+            <Check className="h-3 w-3" />
+            Detected
+          </span>
+        )}
       </div>
       <div className="flex gap-2 text-[11px] font-mono">
         <span className="text-muted-foreground w-14 shrink-0">Host</span>
@@ -184,8 +202,8 @@ export default function DomainsPage() {
   async function handleRecheck(id: string) {
     try {
       await recheckMutation.mutateAsync(id)
-      toast.success("Re-check started", {
-        description: "We'll re-poll each provider shortly.",
+      toast.success("Checking providers", {
+        description: "Polling each provider for the latest DKIM and SPF status.",
       })
     } catch {
       toast.error("Couldn't start re-check")
@@ -449,6 +467,15 @@ export default function DomainsPage() {
                         >
                           <div className="flex items-center gap-2.5">
                             <ProviderIcon provider={p.provider} size={16} chip />
+                            {p.priority != null && (
+                              <span
+                                className="shrink-0 rounded border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                                aria-label={`Priority ${p.priority}`}
+                                title={`Routing priority ${p.priority}`}
+                              >
+                                #{p.priority}
+                              </span>
+                            )}
                             <span
                               className={cn(
                                 "text-sm flex-1 truncate",

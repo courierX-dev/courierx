@@ -92,16 +92,23 @@ class EligibleConnectionsResolver
     Result.new(eligible: [], reason: reason, domain: nil, extras: extras)
   end
 
+  # Returns connection ids in dispatch order based on the matched routing rule.
+  # Falls back to all active connections by priority when:
+  #   - no routing rule matches, OR
+  #   - the matched rule exists but has NO routing_rule_providers attached.
+  #     A half-configured rule (default rule auto-created on signup but never
+  #     populated) shouldn't lock the tenant out of sending — it should defer
+  #     to "all my connections" instead. Surprised us in prod 2026-04-26.
   def candidate_connection_ids
     rule = matched_routing_rule
-    if rule
-      rule.routing_rule_providers.order(:priority).pluck(:provider_connection_id)
-    else
-      @tenant.provider_connections
-             .where(status: HEALTHY_STATUSES)
-             .order(:priority)
-             .pluck(:id)
-    end
+    rule_ids = rule ? rule.routing_rule_providers.order(:priority).pluck(:provider_connection_id) : []
+
+    return rule_ids if rule_ids.any?
+
+    @tenant.provider_connections
+           .where(status: HEALTHY_STATUSES)
+           .order(:priority)
+           .pluck(:id)
   end
 
   def matched_routing_rule
