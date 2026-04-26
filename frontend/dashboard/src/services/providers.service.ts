@@ -66,6 +66,11 @@ export const providersService = {
     await api.delete(`/api/v1/provider_connections/${id}`)
   },
 
+  async setConnectionStatus(id: string, status: "active" | "inactive"): Promise<ProviderConnection> {
+    const { data } = await api.patch<ProviderConnection>(`/api/v1/provider_connections/${id}`, { status })
+    return data
+  },
+
   async listRules(): Promise<RoutingRule[]> {
     const { data } = await api.get<RoutingRule[]>("/api/v1/routing_rules")
     return data

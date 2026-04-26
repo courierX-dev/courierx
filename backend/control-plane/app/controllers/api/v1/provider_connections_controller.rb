@@ -17,8 +17,14 @@ module Api
       def create
         connection = current_tenant.provider_connections.build(connection_params)
         if connection.save
-          # Verify credentials asynchronously-ish: call Go engine to validate
+          # Verify credentials synchronously so the dialog can show a result;
+          # if credentials work, fan this connection out to existing tenant
+          # domains so each domain gets a pending DPV with the provider's DNS
+          # records ready to display.
           verification = ProviderVerificationService.call(connection)
+          if verification[:verified]
+            ProviderConnectionPropagationJob.perform_async(connection.id)
+          end
           render json: connection_json(connection.reload).merge(verification: verification), status: :created
         else
           render json: { errors: connection.errors.full_messages }, status: :unprocessable_entity
@@ -47,6 +53,10 @@ module Api
       def destroy
         @connection.destroy!
         head :no_content
+      rescue ActiveRecord::InvalidForeignKey => e
+        Rails.logger.error("[ProviderConnections] destroy FK violation: #{e.message}")
+        render json: { errors: ["This provider is still referenced by other records. Try excluding it instead."] },
+               status: :unprocessable_entity
       end
 
       private

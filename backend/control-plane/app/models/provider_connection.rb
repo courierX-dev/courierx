@@ -6,7 +6,10 @@ class ProviderConnection < ApplicationRecord
   belongs_to :tenant
   has_many   :routing_rule_providers, dependent: :destroy
   has_many   :routing_rules, through: :routing_rule_providers
-  has_many   :emails
+  # Emails are an audit trail and must outlive the connection. Nullify the FK
+  # on destroy so deleting a provider connection doesn't fail when historical
+  # sends still reference it (and doesn't wipe the send history either).
+  has_many   :emails, dependent: :nullify
   has_one    :provider_quota, dependent: :destroy
   has_many   :provider_quota_usages, dependent: :destroy
   has_many   :domain_provider_verifications, dependent: :destroy

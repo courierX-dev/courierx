@@ -37,6 +37,15 @@ export function useDeleteProviderConnection() {
   })
 }
 
+export function useSetProviderConnectionStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "active" | "inactive" }) =>
+      providersService.setConnectionStatus(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["providerConnections"] }),
+  })
+}
+
 export function useRoutingRules() {
   return useQuery({
     queryKey: ["routingRules"],

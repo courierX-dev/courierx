@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Server, RefreshCw, Activity } from "lucide-react"
+import { Plus, Server, RefreshCw, Activity, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageShell } from "@/components/dashboard/page-shell"
 import { PageHeader } from "@/components/dashboard/page-header"
@@ -12,6 +12,7 @@ import {
   useProviderConnections,
   useDeleteProviderConnection,
   useVerifyProviderConnection,
+  useSetProviderConnectionStatus,
 } from "@/hooks/use-providers"
 import type { ProviderConnection } from "@/services/providers.service"
 import { ProviderIcon } from "@/components/ui/provider-icon"
@@ -46,32 +47,47 @@ function ProviderCard({
   conn,
   onVerify,
   onDelete,
+  onToggle,
   onOpen,
   isVerifying,
   isDeleting,
+  isToggling,
 }: {
   conn: ProviderConnection
   onVerify: () => void
   onDelete: () => void
+  onToggle: () => void
   onOpen: () => void
   isVerifying: boolean
   isDeleting: boolean
+  isToggling: boolean
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Three logical states: active (connected), inactive (excluded by user),
+  // or error (degraded/banned by health checks).
+  const isExcluded = conn.status === "inactive"
+  const isError = conn.status === "degraded" || conn.status === "banned"
   const connected = conn.status === "active"
-  const iconStatus = connected ? "active" : "error"
+  const iconStatus = connected ? "active" : isError ? "error" : "inactive"
   const successPct = conn.success_rate != null ? `${(conn.success_rate * 100).toFixed(1)}%` : "\u2014"
   const latency = conn.avg_latency_ms != null ? `${conn.avg_latency_ms} ms` : "\u2014"
   const lastCheck = conn.last_health_check_at
     ? new Date(conn.last_health_check_at).toLocaleString()
     : "Never checked"
+  const statusLabel = connected ? "Connected" : isExcluded ? "Excluded" : "Error"
+  const statusClass = connected
+    ? "bg-[#ECFDF5] text-[#10B981] border-[#A7F3D0] dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800"
+    : isExcluded
+      ? "bg-muted text-muted-foreground border-border"
+      : "bg-[#FEF2F2] text-destructive border-[#FECACA] dark:bg-red-950 dark:text-red-400 dark:border-red-800"
 
   return (
     <div
       onClick={onOpen}
       className={cn(
         "bg-card border rounded-xl shadow-card p-5 cursor-pointer transition-colors",
-        connected ? "border-border hover:border-foreground/20" : "border-border/60 hover:border-foreground/15 opacity-90",
+        connected ? "border-border hover:border-foreground/20" : "border-border/60 hover:border-foreground/15",
+        isExcluded && "opacity-70",
       )}
     >
       {/* Header */}
@@ -94,12 +110,10 @@ function ProviderCard({
           <span
             className={cn(
               "text-[11px] font-medium px-2 py-[2px] rounded-full border",
-              connected
-                ? "bg-[#ECFDF5] text-[#10B981] border-[#A7F3D0] dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800"
-                : "bg-[#FEF2F2] text-destructive border-[#FECACA] dark:bg-red-950 dark:text-red-400 dark:border-red-800"
+              statusClass,
             )}
           >
-            {connected ? "Connected" : "Error"}
+            {statusLabel}
           </span>
         </div>
       </div>
@@ -139,7 +153,7 @@ function ProviderCard({
         </button>
         {confirmDelete ? (
           <div className="flex items-center gap-1.5 ml-auto">
-            <span className="text-xs text-muted-foreground">Disconnect?</span>
+            <span className="text-xs text-muted-foreground">Delete provider?</span>
             <button
               onClick={() => setConfirmDelete(false)}
               disabled={isDeleting}
@@ -152,16 +166,40 @@ function ProviderCard({
               disabled={isDeleting}
               className="text-xs font-medium px-[10px] py-[5px] rounded-[7px] border border-[#FECACA] bg-[#FEF2F2] text-destructive hover:bg-red-100 transition-colors disabled:opacity-50 dark:bg-red-950 dark:border-red-800"
             >
-              {isDeleting ? "Removing..." : "Remove"}
+              {isDeleting ? "Deleting…" : "Delete"}
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="text-xs font-medium px-[10px] py-[5px] rounded-[7px] border border-[#FECACA] bg-[#FEF2F2] text-destructive hover:bg-red-100 transition-colors ml-auto dark:bg-red-950 dark:border-red-800"
-          >
-            Disconnect
-          </button>
+          <div className="flex items-center gap-2 ml-auto">
+            {/* Toggle: Connect (when excluded) ↔ Exclude (when active).
+                Excluding pauses sending without losing credentials or DPVs. */}
+            <button
+              onClick={onToggle}
+              disabled={isToggling || isError}
+              title={
+                isError
+                  ? "Provider is in an error state — verify credentials first"
+                  : isExcluded
+                    ? "Re-enable this provider for sending"
+                    : "Pause this provider — credentials and DNS records are preserved"
+              }
+              className={cn(
+                "text-xs font-medium px-[10px] py-[5px] rounded-[7px] border transition-colors disabled:opacity-50",
+                isExcluded
+                  ? "border-[#A7F3D0] bg-[#ECFDF5] text-[#10B981] hover:bg-emerald-100 dark:bg-emerald-950 dark:border-emerald-800 dark:text-emerald-400"
+                  : "border-border bg-card text-foreground/80 hover:bg-muted",
+              )}
+            >
+              {isToggling ? "…" : isExcluded ? "Connect" : "Exclude"}
+            </button>
+            <button
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Delete provider"
+              className="p-[5px] rounded-[7px] border border-border text-muted-foreground hover:text-destructive hover:border-[#FECACA] hover:bg-[#FEF2F2] transition-colors dark:hover:bg-red-950 dark:hover:border-red-800"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -172,16 +210,35 @@ export default function ProvidersPage() {
   const { data: connections, isLoading, isError, refetch } = useProviderConnections()
   const deleteMutation = useDeleteProviderConnection()
   const verifyMutation = useVerifyProviderConnection()
+  const toggleMutation = useSetProviderConnectionStatus()
   const [connectOpen, setConnectOpen] = useState(false)
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ProviderConnection | null>(null)
 
   async function handleDelete(conn: ProviderConnection) {
     try {
       await deleteMutation.mutateAsync(conn.id)
-      toast.success("Provider disconnected", { description: providerLabel(conn.provider) })
+      toast.success("Provider deleted", { description: providerLabel(conn.provider) })
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { errors?: string[] } } }
+      const msg = apiErr.response?.data?.errors?.[0] ?? "Failed to delete provider"
+      toast.error(msg)
+    }
+  }
+
+  async function handleToggle(conn: ProviderConnection) {
+    const next: "active" | "inactive" = conn.status === "active" ? "inactive" : "active"
+    setTogglingId(conn.id)
+    try {
+      await toggleMutation.mutateAsync({ id: conn.id, status: next })
+      toast.success(next === "active" ? "Provider re-enabled" : "Provider excluded", {
+        description: providerLabel(conn.provider),
+      })
     } catch {
-      toast.error("Failed to disconnect provider")
+      toast.error("Couldn't update provider status")
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -255,9 +312,11 @@ export default function ProvidersPage() {
               conn={conn}
               onVerify={() => handleVerify(conn)}
               onDelete={() => handleDelete(conn)}
+              onToggle={() => handleToggle(conn)}
               onOpen={() => setDetail(conn)}
               isVerifying={verifyingId === conn.id}
               isDeleting={deleteMutation.isPending}
+              isToggling={togglingId === conn.id}
             />
           ))}
         </div>
