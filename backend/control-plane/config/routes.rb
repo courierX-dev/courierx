@@ -72,7 +72,10 @@ Rails.application.routes.draw do
         member { post :verify }
       end
       resources :domains,              only: [:index, :show, :create, :update, :destroy] do
-        member { post :verify }
+        member do
+          post :verify
+          post :recheck   # Re-poll every per-provider DPV for this domain
+        end
       end
       resources :routing_rules,        only: [:index, :show, :create, :update, :destroy]
       resources :emails,               only: [:index, :show, :create]

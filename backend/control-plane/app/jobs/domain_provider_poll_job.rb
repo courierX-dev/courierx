@@ -41,13 +41,18 @@ class DomainProviderPollJob
   private
 
   def check(dpv, domain)
-    connection = domain.tenant.provider_connections.find_by(provider: dpv.provider, status: "active")
-    unless connection
-      dpv.update!(status: "failed", error: "No active provider connection", last_checked_at: Time.current)
+    # Multi-account: DPV references its specific connection directly. The old
+    # find_by(provider:) lookup was ambiguous when a tenant had multiple
+    # connections of the same provider type.
+    connection = dpv.provider_connection
+    unless connection && connection.status == "active"
+      dpv.update!(status: "failed",
+                  error: connection ? "Connection is #{connection&.status}" : "Connection deleted",
+                  last_checked_at: Time.current)
       return
     end
 
-    adapter = adapter_for(dpv.provider)
+    adapter = adapter_for(connection.provider)
     result  = adapter.verify(domain, connection, external_id: dpv.external_domain_id)
 
     if result[:verified]

@@ -3,10 +3,12 @@
 module Api
   module V1
     class DomainsController < BaseController
-      before_action :set_domain, only: [:show, :update, :destroy, :verify]
+      before_action :set_domain, only: [:show, :update, :destroy, :verify, :recheck]
 
       def index
-        domains = current_tenant.domains.order(created_at: :desc)
+        domains = current_tenant.domains
+                                .includes(domain_provider_verifications: :provider_connection)
+                                .order(created_at: :desc)
         render json: domains.map { |d| domain_json(d) }
       end
 
@@ -36,6 +38,14 @@ module Api
         @domain.update!(status: "pending_verification")
         DomainVerificationJob.perform_async(@domain.id)
         render json: { message: "Verification started" }, status: :accepted
+      end
+
+      # Re-poll every per-(domain × provider) verification immediately, instead
+      # of waiting for the next scheduled poll. Used by the dashboard's
+      # "Re-check" button after the user adds DNS records at their provider.
+      def recheck
+        DomainProviderPollJob.perform_async(@domain.id)
+        render json: { message: "Re-check started" }, status: :accepted
       end
 
       def destroy
@@ -85,12 +95,17 @@ module Api
           dns_records:        unified,
           providers:          dpvs.map { |dpv|
             {
-              provider:           dpv.provider,
-              status:             dpv.status,
-              verified_at:        dpv.verified_at,
-              last_checked_at:    dpv.last_checked_at,
-              error:              dpv.error,
-              external_domain_id: dpv.external_domain_id
+              # `provider_connection_id` and `display_name` distinguish two
+              # connections of the same provider type ("Resend Production" vs
+              # "Resend Marketing") in the multi-account world.
+              provider_connection_id: dpv.provider_connection_id,
+              provider:               dpv.provider,
+              display_name:           dpv.provider_connection&.display_name,
+              status:                 dpv.status,
+              verified_at:            dpv.verified_at,
+              last_checked_at:        dpv.last_checked_at,
+              error:                  dpv.error,
+              external_domain_id:     dpv.external_domain_id
             }
           }
         }

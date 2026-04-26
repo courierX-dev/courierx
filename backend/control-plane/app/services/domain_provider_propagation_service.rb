@@ -12,14 +12,22 @@
 # satisfies every provider they use — instead of doing this setup five
 # separate times in five different dashboards.
 #
-# Usage:
-#   DomainProviderPropagationService.call(domain)
-#
-# Returns an array of DomainProviderVerification records.
+# Two entry points:
+#   call(domain)                        — fan one domain out to every connection
+#   propagate_for_connection(conn)      — fan one connection out to every domain
+#                                         (used when a tenant adds a NEW provider
+#                                          and we need to backfill DPVs for the
+#                                          domains they already own)
 #
 class DomainProviderPropagationService
   def self.call(domain)
     new(domain).call
+  end
+
+  def self.propagate_for_connection(connection)
+    connection.tenant.domains.map do |domain|
+      new(domain).send(:propagate_to, connection)
+    end
   end
 
   def initialize(domain)
@@ -35,7 +43,11 @@ class DomainProviderPropagationService
   private
 
   def propagate_to(connection)
-    dpv = @domain.domain_provider_verifications.find_or_initialize_by(provider: connection.provider)
+    # Multi-account: a tenant can have several Resend connections. DPV is keyed
+    # on the specific connection, not the provider type, so each Resend account
+    # gets its own DPV row even when the domain is the same.
+    dpv = @domain.domain_provider_verifications
+                 .find_or_initialize_by(provider_connection: connection)
     dpv.status = "pending" if dpv.new_record?
 
     result = adapter_for(connection).register(@domain, connection)

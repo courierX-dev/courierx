@@ -31,6 +31,14 @@ export function useVerifyDomain() {
   })
 }
 
+export function useRecheckDomain() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => domainsService.recheck(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["domains"] }),
+  })
+}
+
 export function useDeleteDomain() {
   const qc = useQueryClient()
   return useMutation({

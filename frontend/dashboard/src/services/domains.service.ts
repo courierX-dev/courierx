@@ -1,5 +1,23 @@
 import api from "./api"
 
+export interface DnsRecord {
+  type: "TXT" | "CNAME" | "MX" | string
+  name: string
+  value: string
+  ttl?: number
+}
+
+export interface DomainProviderVerification {
+  provider_connection_id: string
+  provider: "sendgrid" | "mailgun" | "aws_ses" | "resend" | "postmark" | "smtp" | string
+  display_name: string | null
+  status: "pending" | "verified" | "failed" | string
+  verified_at: string | null
+  last_checked_at: string | null
+  error: string | null
+  external_domain_id: string | null
+}
+
 export interface Domain {
   id: string
   domain: string
@@ -9,6 +27,12 @@ export interface Domain {
   spf_record: string | null
   dkim_selector: string | null
   created_at: string
+  // Merged DNS bundle: ownership token + every connected provider's required
+  // records, deduplicated. Render this — don't hardcode per-record fields.
+  dns_records: DnsRecord[]
+  // One entry per (domain × provider connection). Multi-account-aware:
+  // distinct rows for "Resend (Production)" and "Resend (Marketing)".
+  providers: DomainProviderVerification[]
 }
 
 export const domainsService = {
@@ -24,6 +48,14 @@ export const domainsService = {
 
   async verify(id: string): Promise<Domain> {
     const { data } = await api.post<Domain>(`/api/v1/domains/${id}/verify`)
+    return data
+  },
+
+  // Re-poll every per-provider verification for this domain. Used after the
+  // user adds DNS records at their registrar — saves them waiting for the
+  // 15-minute background poll cycle.
+  async recheck(id: string): Promise<{ message: string }> {
+    const { data } = await api.post<{ message: string }>(`/api/v1/domains/${id}/recheck`)
     return data
   },
 
