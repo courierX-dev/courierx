@@ -1,8 +1,8 @@
 class ProviderQuota < ApplicationRecord
-  # Rails' default inflector treats "quota" as uncountable, so without this
-  # the table name is mis-inferred as "provider_quota" (singular). The
-  # initializer in config/initializers/inflections.rb fixes the global rule;
-  # this is a belt-and-suspenders override.
+  # Rails' default inflector treats "quota" as uncountable, so the table name
+  # is mis-inferred as "provider_quota" (singular). Pin it explicitly rather
+  # than registering a global "quota" → "quotas" rule, which would break
+  # compound names like "provider_quota_usages".
   self.table_name = "provider_quotas"
 
   RESET_STRATEGIES = %w[rolling_24h calendar_day_utc calendar_month_utc billing_cycle].freeze

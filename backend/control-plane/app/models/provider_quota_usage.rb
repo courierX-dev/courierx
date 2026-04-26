@@ -1,4 +1,9 @@
 class ProviderQuotaUsage < ApplicationRecord
+  # Rails' default inflector treats "quota" as uncountable, so the table name
+  # is mis-inferred (compound names like "provider_quota_usage" get pluralized
+  # as "provider_quotas_usage"). Pin the table name explicitly.
+  self.table_name = "provider_quota_usages"
+
   PERIODS = %w[day month].freeze
 
   belongs_to :provider_connection
