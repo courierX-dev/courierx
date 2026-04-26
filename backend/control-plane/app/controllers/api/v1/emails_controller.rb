@@ -102,6 +102,8 @@ module Api
           display_message: email.display_message,
           display_cta:     email.display_cta,
           last_error:      email.last_error,
+          provider:               email.provider_connection&.provider,
+          provider_display_name:  email.provider_connection&.display_name,
           provider_message_id: email.provider_message_id,
           tags: email.tags,
           queued_at: email.queued_at,

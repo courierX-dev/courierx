@@ -38,8 +38,17 @@ type SendResponse struct {
 	MessageID  string `json:"messageId,omitempty"`
 	Provider   string `json:"provider,omitempty"`
 	Error      string `json:"error,omitempty"`
-	Idempotent bool   `json:"idempotent,omitempty"` // true = served from idempotency cache
-	DurationMs int64  `json:"durationMs,omitempty"`
+	// Classification tells the caller (Rails OutboxProcessorJob) how a failure
+	// should be handled. The HTTP status code already encodes retry vs no-retry,
+	// but this is the human-readable label that surfaces in logs and the
+	// dashboard's email-detail "Why this failed" panel:
+	//   recipient_permanent → bad recipient/payload, no provider can fix it
+	//   provider_permanent  → this provider can't help, others may
+	//   transient           → temporary failure, will retry
+	//   rate_limit          → throttled, will retry with backoff
+	Classification string `json:"classification,omitempty"`
+	Idempotent     bool   `json:"idempotent,omitempty"` // true = served from idempotency cache
+	DurationMs     int64  `json:"durationMs,omitempty"`
 }
 
 // BulkSendRequest represents a batch send request (up to 1,000 recipients).

@@ -39,14 +39,36 @@ func NewProvider(config types.ProviderConfig) (Provider, error) {
 	}
 }
 
-// PermanentError signals that the error is not retryable across providers.
-// Providers should return this type for auth failures, invalid addresses, etc.
-type PermanentError struct {
+// RecipientPermanentError signals that the recipient address itself is
+// unfixable — invalid, malformed, or rejected in a way no provider could
+// possibly accept. The router stops the failover chain on these because
+// trying another provider would just re-fail.
+type RecipientPermanentError struct {
 	Code    int
 	Message string
 }
 
-func (e *PermanentError) Error() string { return e.Message }
+func (e *RecipientPermanentError) Error() string { return e.Message }
+
+// ProviderPermanentError signals that *this specific provider* can't send
+// the message — auth failure, sending domain not verified on this provider's
+// side, account suspended at the provider, etc. Other providers in the chain
+// may still succeed, so the router skips this one and tries the next.
+type ProviderPermanentError struct {
+	Provider string
+	Code     int
+	Message  string
+}
+
+func (e *ProviderPermanentError) Error() string { return e.Message }
+
+// PermanentError is the legacy name for RecipientPermanentError. Aliased so
+// existing call sites and tests keep compiling. New code should use the
+// specific Recipient/ProviderPermanentError types.
+//
+// Deprecated: use RecipientPermanentError for recipient-side errors or
+// ProviderPermanentError for provider-side errors.
+type PermanentError = RecipientPermanentError
 
 // RateLimitError signals that the provider is rate-limiting; failover to next.
 type RateLimitError struct {
@@ -59,22 +81,45 @@ func (e *RateLimitError) Error() string { return e.Message }
 type ErrorClassification string
 
 const (
-	ErrorPermanent ErrorClassification = "permanent"
+	// ErrorRecipientPermanent — recipient is bad, stop the chain.
+	ErrorRecipientPermanent ErrorClassification = "recipient_permanent"
+	// ErrorProviderPermanent — this provider can't help, try the next one.
+	ErrorProviderPermanent ErrorClassification = "provider_permanent"
+	// ErrorTransient — temporary failure, try the next provider (and retry).
 	ErrorTransient ErrorClassification = "transient"
+	// ErrorRateLimit — provider is throttling, try the next or back off.
 	ErrorRateLimit ErrorClassification = "rate_limit"
+
+	// ErrorPermanent is the legacy alias for ErrorRecipientPermanent. Existing
+	// callers comparing classification == ErrorPermanent keep working.
+	//
+	// Deprecated: prefer ErrorRecipientPermanent / ErrorProviderPermanent.
+	ErrorPermanent = ErrorRecipientPermanent
 )
 
-// ClassifyError determines whether an error warrants failover.
-// Typed errors (*PermanentError, *RateLimitError) take precedence over
-// string-matching so provider API changes don't silently flip classification.
+// ClassifyError determines how an error should affect routing.
+// Typed errors take precedence over string-matching so provider API changes
+// don't silently flip classification.
+//
+// Buckets:
+//   - RecipientPermanent — bad recipient/payload; no provider can fix it
+//   - ProviderPermanent  — auth/setup broken on this provider; try next
+//   - RateLimit          — throttled; try next provider, retry later
+//   - Transient          — timeout / 5xx / unknown; try next, retry later
 func ClassifyError(err error) ErrorClassification {
 	if err == nil {
 		return ""
 	}
 
-	var permErr *PermanentError
-	if errors.As(err, &permErr) {
-		return ErrorPermanent
+	// Typed errors first — most reliable signal.
+	var provPermErr *ProviderPermanentError
+	if errors.As(err, &provPermErr) {
+		return ErrorProviderPermanent
+	}
+
+	var recipPermErr *RecipientPermanentError
+	if errors.As(err, &recipPermErr) {
+		return ErrorRecipientPermanent
 	}
 
 	var rlErr *RateLimitError
@@ -83,19 +128,38 @@ func ClassifyError(err error) ErrorClassification {
 	}
 
 	s := strings.ToLower(err.Error())
-	switch {
-	case containsAny(s, "invalid email", "unauthorized", "authentication failed",
-		"invalid api key", "bad request", "malformed", "forbidden",
-		"invalid sender", "domain not verified", "unverified"):
-		return ErrorPermanent
 
-	case containsAny(s, "rate limit", "too many requests", "quota exceeded",
-		"sending limit", "throttl"):
+	// Rate limits — check first; some providers include "rate limit" alongside
+	// auth errors and we want to back off rather than skip.
+	if containsAny(s, "rate limit", "too many requests", "quota exceeded",
+		"sending limit", "throttl") {
 		return ErrorRateLimit
-
-	default:
-		return ErrorTransient
 	}
+
+	// Recipient-permanent — the address or payload is bad in a way every
+	// provider would reject. Match conservatively; ambiguous strings fall
+	// through to provider-permanent (skip-and-continue) instead.
+	if containsAny(s,
+		"invalid email", "invalid recipient",
+		"no such user", "user unknown",
+		"address rejected", "mailbox does not exist",
+		"malformed") {
+		return ErrorRecipientPermanent
+	}
+
+	// Provider-permanent — this provider's auth or setup is broken. Other
+	// providers in the chain may still send for us.
+	if containsAny(s,
+		"unauthorized", "authentication failed",
+		"invalid api key", "invalid api token", "forbidden",
+		"invalid sender", "sender not authorized",
+		"domain not verified", "unverified", "not verified",
+		"account suspended", "ip blocked",
+		"bad request") {
+		return ErrorProviderPermanent
+	}
+
+	return ErrorTransient
 }
 
 func containsAny(s string, patterns ...string) bool {

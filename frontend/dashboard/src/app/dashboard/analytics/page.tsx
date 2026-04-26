@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/dashboard/page-header"
 import { InlineError } from "@/components/dashboard/inline-error"
 import { AnimatedNumber } from "@/components/dashboard/animated-number"
 import { DotIndicator } from "@/components/ui/dot-indicator"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 import { cn } from "@/lib/utils"
 import { useDashboardMetrics } from "@/hooks/use-dashboard"
 import type { Period } from "@/services/dashboard.service"
@@ -135,7 +136,12 @@ export default function AnalyticsPage() {
                   key={p.id}
                   className={cn("hover:bg-muted/20 transition-colors", i < metrics.providers.length - 1 && "border-b border-border/50")}
                 >
-                  <td className="px-4 py-2.5 text-sm font-medium">{p.display_name ?? p.provider}</td>
+                  <td className="px-4 py-2.5 text-sm font-medium">
+                    <div className="flex items-center gap-2">
+                      <ProviderIcon provider={p.provider} size={14} />
+                      <span>{p.display_name ?? p.provider}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       <DotIndicator status={p.status} />

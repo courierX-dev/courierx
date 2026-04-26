@@ -45,14 +45,18 @@ Rails.application.routes.draw do
       post  "auth/activate",  to: "auth#activate"
 
       # ── Inbound provider webhooks (public, each provider verifies its own signature) ──
+      # Legacy global URLs — kept for single-tenant deploys using ENV-based
+      # signing keys.
       post "webhooks/sendgrid", to: "provider_webhooks/sendgrid#create"
       post "webhooks/mailgun",  to: "provider_webhooks/mailgun#create"
       post "webhooks/ses",      to: "provider_webhooks/ses#create"
-      # Resend & Postmark are BYOK-per-tenant — each connection has its own
-      # webhook signing secret, so the URL embeds a per-connection token that
-      # tells us which ProviderConnection to look up before we verify the body.
+      # BYOK token URLs — each ProviderConnection has its own webhook_token
+      # and signing secret. ProviderWebhookProvisionJob registers these URLs
+      # on the tenant's provider account automatically.
       post "webhooks/resend/:token",   to: "provider_webhooks/resend#create",   as: :resend_webhook
       post "webhooks/postmark/:token", to: "provider_webhooks/postmark#create", as: :postmark_webhook
+      post "webhooks/sendgrid/:token", to: "provider_webhooks/sendgrid#create", as: :sendgrid_webhook
+      post "webhooks/mailgun/:token",  to: "provider_webhooks/mailgun#create",  as: :mailgun_webhook
 
       # ── Health check (public) ──
       get "health", to: "health#show"
@@ -69,7 +73,10 @@ Rails.application.routes.draw do
         member { patch :revoke }
       end
       resources :provider_connections, only: [:index, :show, :create, :update, :destroy] do
-        member { post :verify }
+        member do
+          post :verify
+          post :resync_webhook
+        end
       end
       resources :domains,              only: [:index, :show, :create, :update, :destroy] do
         member do

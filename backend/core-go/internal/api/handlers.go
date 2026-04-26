@@ -74,6 +74,22 @@ func (h *Handler) ProviderStats(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"stats": stats})
 }
 
+// statusForClassification maps a routing-layer error classification to the
+// HTTP status code we return to the Control Plane. Rails' OutboxProcessorJob
+// treats 5xx + 408/429 as transient (retries via Sidekiq backoff) and any
+// other 4xx as permanent (marks the email failed, no retry). The mapping
+// here is what makes that contract work.
+func statusForClassification(c providers.ErrorClassification) int {
+	switch c {
+	case providers.ErrorRecipientPermanent, providers.ErrorProviderPermanent:
+		return fiber.StatusUnprocessableEntity // 422 — definitive, no retry
+	case providers.ErrorRateLimit:
+		return fiber.StatusTooManyRequests // 429 — retry with backoff
+	default:
+		return fiber.StatusBadGateway // 502 — transient upstream issue, retry
+	}
+}
+
 // HealthLive is the liveness probe — returns 200 if the process is alive.
 // Kubernetes uses this to decide whether to restart the pod.
 func (h *Handler) HealthLive(c *fiber.Ctx) error {
@@ -175,12 +191,18 @@ func (h *Handler) Send(c *fiber.Ctx) error {
 
 	resp, err := router.Send(c.Context(), &req)
 	if err != nil {
+		classification := providers.ClassifyError(err)
+		status := statusForClassification(classification)
 		slog.Error("send failed",
 			"request_id", requestID,
 			"to", req.To,
+			"classification", string(classification),
+			"http_status", status,
 			"error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(types.SendResponse{
-			Success: false, Error: err.Error(),
+		return c.Status(status).JSON(types.SendResponse{
+			Success:        false,
+			Error:          err.Error(),
+			Classification: string(classification),
 		})
 	}
 

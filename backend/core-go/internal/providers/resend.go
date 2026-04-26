@@ -100,7 +100,20 @@ func (p *ResendProvider) Send(ctx context.Context, req *types.SendRequest) (*typ
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("resend: status %d: %s", resp.StatusCode, string(b))
+		body := string(b)
+
+		// 401/403 = auth or domain-not-verified — provider-permanent. The
+		// router should skip Resend and try the next provider in the chain
+		// instead of treating this as an all-providers stop.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, &ProviderPermanentError{
+				Provider: "resend",
+				Code:     resp.StatusCode,
+				Message:  fmt.Sprintf("resend: status %d: %s", resp.StatusCode, body),
+			}
+		}
+
+		return nil, fmt.Errorf("resend: status %d: %s", resp.StatusCode, body)
 	}
 
 	var result struct {

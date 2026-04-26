@@ -5,25 +5,23 @@ module Api
     module ProviderWebhooks
       # Receives Event Webhook POSTs from SendGrid.
       #
-      # SendGrid sends a JSON array of event objects. Each event contains:
-      #   - event:     "delivered" | "bounce" | "dropped" | "spamreport" | "open" | "click" | ...
-      #   - sg_message_id: unique message ID (we store this as provider_message_id)
-      #   - timestamp: Unix epoch
-      #   - email:     recipient email
-      #   - reason:    bounce/drop reason
-      #   - type:      "bounce" or "blocked"
-      #   - status:    SMTP status code (e.g. "5.1.1")
-      #   - url:       clicked URL
-      #   - useragent: user agent for opens/clicks
-      #   - ip:        IP address
+      # Two ingress paths:
       #
-      # Verification: SendGrid signs payloads with ECDSA using the Signed Event
-      # Webhook verification key. We verify using the public key.
+      #   POST /api/v1/webhooks/sendgrid           — legacy global URL,
+      #     signed with the ECDSA verification key in
+      #     SENDGRID_WEBHOOK_VERIFICATION_KEY (single-tenant deployments).
+      #
+      #   POST /api/v1/webhooks/sendgrid/:token    — BYOK auto-provisioned,
+      #     each ProviderConnection has its own token + ECDSA public key
+      #     stored in encrypted_webhook_secret. The ProviderWebhookProvisioner
+      #     enables Signed Event Webhooks on the tenant's account and persists
+      #     the public key returned by SendGrid.
       #
       class SendgridController < BaseController
+        before_action :load_connection
         before_action :verify_signature
 
-        # POST /api/v1/webhooks/sendgrid
+        # POST /api/v1/webhooks/sendgrid(/:token)
         def create
           events = parse_events
           process_events(events)
@@ -31,16 +29,29 @@ module Api
 
         private
 
+        def load_connection
+          token = params[:token].to_s
+          return if token.blank? # legacy global path
+
+          @connection = ProviderConnection.find_by(webhook_token: token, provider: "sendgrid")
+          head(:unauthorized) and return unless @connection
+        end
+
         # SendGrid Signed Event Webhook verification
         # https://docs.sendgrid.com/for-developers/tracking-events/getting-started-event-webhook-security-features
         def verify_signature
-          verification_key = ENV["SENDGRID_WEBHOOK_VERIFICATION_KEY"]
+          verification_key = @connection&.webhook_secret.presence || ENV["SENDGRID_WEBHOOK_VERIFICATION_KEY"]
 
-          # Skip verification if no key configured (dev mode)
-          return if verification_key.blank?
+          # Skip verification if no key configured (dev mode for global path,
+          # or auto-provision still pending for the BYOK path).
+          if verification_key.blank?
+            # On the BYOK path, missing key means we can't trust this payload.
+            head :unauthorized and return if @connection
+            return
+          end
 
-          signature   = request.headers["X-Twilio-Email-Event-Webhook-Signature"]
-          timestamp   = request.headers["X-Twilio-Email-Event-Webhook-Timestamp"]
+          signature = request.headers["X-Twilio-Email-Event-Webhook-Signature"]
+          timestamp = request.headers["X-Twilio-Email-Event-Webhook-Timestamp"]
 
           unless signature.present? && timestamp.present?
             head :unauthorized and return

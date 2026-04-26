@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_25_000012) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_26_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -272,11 +272,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_25_000012) do
     t.float "success_rate"
     t.uuid "tenant_id", null: false
     t.datetime "updated_at", null: false
+    t.boolean "webhook_auto_managed", default: true, null: false
+    t.string "webhook_external_id"
+    t.string "webhook_last_error"
+    t.datetime "webhook_last_synced_at"
+    t.string "webhook_status", default: "not_configured", null: false
     t.string "webhook_token"
     t.integer "weight", default: 100, null: false
     t.index ["tenant_id", "provider", "mode", "display_name"], name: "idx_provider_connections_unique_per_account", unique: true
     t.index ["tenant_id", "status"], name: "index_provider_connections_on_tenant_id_and_status"
     t.index ["tenant_id"], name: "index_provider_connections_on_tenant_id"
+    t.index ["webhook_status"], name: "index_provider_connections_on_webhook_status"
     t.index ["webhook_token"], name: "index_provider_connections_on_webhook_token", unique: true, where: "(webhook_token IS NOT NULL)"
   end
 

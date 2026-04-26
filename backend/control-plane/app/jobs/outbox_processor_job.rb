@@ -133,6 +133,20 @@ class OutboxProcessorJob
         provider_message_id: body["messageId"],
         provider_connection: provider_conn
       )
+
+      # Bump cap-tracking counters for the connection that actually sent.
+      # The resolver reads these to skip connections that hit their daily
+      # or monthly cap. Counts are best-effort — a missed increment doesn't
+      # block delivery.
+      if provider_conn
+        begin
+          ProviderQuotaUsage.increment!(provider_connection_id: provider_conn.id, period: "day")
+          ProviderQuotaUsage.increment!(provider_connection_id: provider_conn.id, period: "month")
+        rescue StandardError => e
+          Rails.logger.warn "[OutboxProcessor] quota increment failed for #{provider_conn.id}: #{e.message}"
+        end
+      end
+
       event.complete!
     else
       Rails.logger.error "[OutboxProcessor] Go service error! Status: #{response.status}, Body: #{response.body}"

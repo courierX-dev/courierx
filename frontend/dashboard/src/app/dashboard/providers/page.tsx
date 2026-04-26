@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Plus, Server, RefreshCw, Activity, Trash2 } from "lucide-react"
+import { useMemo, useState } from "react"
+import { Plus, Server, RefreshCw, Activity, Trash2, Webhook, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageShell } from "@/components/dashboard/page-shell"
 import { PageHeader } from "@/components/dashboard/page-header"
@@ -118,6 +118,24 @@ function ProviderCard({
         </div>
       </div>
 
+      {/* Webhook hint — only when something needs attention. Auto + healthy
+          = silent (status sits inside the detail dialog). */}
+      {conn.webhook?.supports_auto &&
+        ["failed", "needs_signing_key", "not_configured", "revoked"].includes(
+          conn.webhook.status,
+        ) && (
+          <div className="flex items-center gap-1.5 mb-2 text-[11px] text-amber-700 dark:text-amber-400">
+            <AlertCircle className="h-3 w-3" />
+            <span>Webhook needs attention — open to resync</span>
+          </div>
+        )}
+      {conn.webhook?.status === "manual" && !conn.webhook.auto_managed && (
+        <div className="flex items-center gap-1.5 mb-2 text-[11px] text-muted-foreground">
+          <Webhook className="h-3 w-3" />
+          <span>Manual webhook — switch to auto in details</span>
+        </div>
+      )}
+
       {/* Operational summary */}
       <div className="grid grid-cols-3 gap-2 bg-background border border-border rounded-lg px-3 py-2 mb-3">
         <div>
@@ -214,7 +232,13 @@ export default function ProvidersPage() {
   const [connectOpen, setConnectOpen] = useState(false)
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<ProviderConnection | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  // Always read the latest version of the open connection from the query
+  // cache so resync/save mutations refresh the dialog without remounting.
+  const detail = useMemo(
+    () => (detailId ? connections?.find((c) => c.id === detailId) ?? null : null),
+    [detailId, connections],
+  )
 
   async function handleDelete(conn: ProviderConnection) {
     try {
@@ -283,6 +307,9 @@ export default function ProvidersPage() {
   }
 
   const providers = connections ?? []
+  const manualLegacyCount = providers.filter(
+    (c) => c.webhook?.supports_auto && c.webhook.status === "manual" && !c.webhook.auto_managed,
+  ).length
 
   return (
     <PageShell>
@@ -292,6 +319,22 @@ export default function ProvidersPage() {
           Connect provider
         </Button>
       </PageHeader>
+
+      {manualLegacyCount > 0 && (
+        <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-xs text-[#92400E] dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300 flex items-start gap-3">
+          <Webhook className="h-4 w-4 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <div className="font-semibold">
+              {manualLegacyCount} {manualLegacyCount === 1 ? "provider has" : "providers have"} a manual webhook
+            </div>
+            <div className="mt-0.5">
+              We can register and rotate the webhook on your provider account for you. Open a provider and click
+              <span className="font-mono mx-1">Switch to auto-managed</span>
+              to upgrade.
+            </div>
+          </div>
+        </div>
+      )}
 
       {providers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -313,7 +356,7 @@ export default function ProvidersPage() {
               onVerify={() => handleVerify(conn)}
               onDelete={() => handleDelete(conn)}
               onToggle={() => handleToggle(conn)}
-              onOpen={() => setDetail(conn)}
+              onOpen={() => setDetailId(conn.id)}
               isVerifying={verifyingId === conn.id}
               isDeleting={deleteMutation.isPending}
               isToggling={togglingId === conn.id}
@@ -341,7 +384,7 @@ export default function ProvidersPage() {
 
       <ProviderDetailDialog
         conn={detail}
-        onOpenChange={(o) => !o && setDetail(null)}
+        onOpenChange={(o) => !o && setDetailId(null)}
         onVerify={() => detail && handleVerify(detail)}
         isVerifying={!!detail && verifyingId === detail.id}
       />

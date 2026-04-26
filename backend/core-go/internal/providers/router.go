@@ -49,8 +49,17 @@ func NewRouter(routes []types.Route, recorder RouterRecorder) *Router {
 }
 
 // Send attempts to deliver the email through the provider chain.
-// On transient / rate-limit errors it advances to the next provider.
-// On permanent errors it stops immediately.
+//
+// Failover behaviour by error classification:
+//   - RecipientPermanent — stop immediately; no provider can fix a bad recipient.
+//   - ProviderPermanent  — skip this provider, try the next (this provider's
+//                          auth or setup is broken, but others may still work).
+//   - RateLimit          — try the next provider; the caller can also retry later.
+//   - Transient          — try the next provider; the caller should retry later.
+//
+// When the entire chain is exhausted, the wrapped lastErr keeps its original
+// classification so the handler can pick the right HTTP status (422 = no retry
+// for permanent failures, 502/429 = retry for transient/rate-limit).
 func (r *Router) Send(ctx context.Context, req *types.SendRequest) (*types.SendResponse, error) {
 	if len(r.providers) == 0 {
 		return nil, fmt.Errorf("no provider routes configured")
@@ -90,22 +99,29 @@ func (r *Router) Send(ctx context.Context, req *types.SendRequest) (*types.SendR
 			"error", err)
 		lastErr = err
 
-		// Permanent errors — stop immediately, no failover
-		if classification == ErrorPermanent {
-			return nil, fmt.Errorf("permanent error from %s: %w", providerName, err)
+		// Recipient-permanent: stop the chain. The recipient address itself
+		// is unfixable, retrying via another provider would just re-fail.
+		if classification == ErrorRecipientPermanent {
+			return nil, fmt.Errorf("recipient permanent error from %s: %w", providerName, err)
 		}
 
-		// Transient / rate-limit — try next provider
+		// Everything else (provider-permanent, transient, rate-limit) → next
+		// provider. Provider-permanent means *this* provider can't help — the
+		// next one might.
 		if i < len(r.providers)-1 {
 			nextProvider := r.providers[i+1].Name()
-			slog.Info("failing over to next provider",
+			slog.Info("trying next provider",
 				"from", providerName,
-				"to", nextProvider)
+				"to", nextProvider,
+				"reason", string(classification))
 			if r.recorder != nil {
 				r.recorder.RecordFailover(providerName, nextProvider)
 			}
 		}
 	}
 
-	return nil, fmt.Errorf("all providers failed, last error: %w", lastErr)
+	// %w preserves the lastErr type so the handler / errors.As() at the API
+	// boundary can still recover the original classification and pick a
+	// status code that matches (permanent → 422, transient → 502, etc.).
+	return nil, fmt.Errorf("all providers exhausted, last error: %w", lastErr)
 }

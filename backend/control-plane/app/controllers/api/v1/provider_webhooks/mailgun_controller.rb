@@ -5,16 +5,21 @@ module Api
     module ProviderWebhooks
       # Receives webhook POSTs from Mailgun.
       #
-      # Mailgun sends events as form-encoded or JSON with this structure:
-      #   signature: { token, timestamp, signature }
-      #   event-data: { event, message.headers.message-id, recipient, ... }
+      # Two ingress paths:
       #
-      # Verification: HMAC-SHA256 of (timestamp + token) using the webhook signing key.
+      #   POST /api/v1/webhooks/mailgun           — legacy global URL,
+      #     signed with MAILGUN_WEBHOOK_SIGNING_KEY (single-tenant deploys).
+      #
+      #   POST /api/v1/webhooks/mailgun/:token    — BYOK auto-provisioned,
+      #     each ProviderConnection has its own token + HTTP signing key
+      #     stored in encrypted_webhook_secret. Mailgun signs the payload
+      #     with HMAC-SHA256 of (timestamp + token) using that key.
       #
       class MailgunController < BaseController
+        before_action :load_connection
         before_action :verify_signature
 
-        # POST /api/v1/webhooks/mailgun
+        # POST /api/v1/webhooks/mailgun(/:token)
         def create
           events = parse_events
           process_events(events)
@@ -22,9 +27,21 @@ module Api
 
         private
 
+        def load_connection
+          token = params[:token].to_s
+          return if token.blank? # legacy global path
+
+          @connection = ProviderConnection.find_by(webhook_token: token, provider: "mailgun")
+          head(:unauthorized) and return unless @connection
+        end
+
         def verify_signature
-          signing_key = ENV["MAILGUN_WEBHOOK_SIGNING_KEY"]
-          return if signing_key.blank?
+          signing_key = @connection&.webhook_secret.presence || ENV["MAILGUN_WEBHOOK_SIGNING_KEY"]
+
+          if signing_key.blank?
+            head :unauthorized and return if @connection
+            return
+          end
 
           sig_data  = params.dig("signature") || {}
           timestamp = sig_data["timestamp"].to_s
@@ -50,7 +67,7 @@ module Api
 
         def parse_events
           event_data = params["event-data"] || params["event_data"]
-          return [] unless event_data.is_a?(Hash)
+          return [] unless event_data.is_a?(Hash) || event_data.respond_to?(:to_unsafe_h)
 
           event_type = map_event_type(event_data["event"])
           return [] unless event_type
@@ -79,7 +96,7 @@ module Api
             link_url:            event_data["url"],
             user_agent:          event_data.dig("client-info", "user-agent"),
             ip_address:          event_data["ip"],
-            raw_payload:         event_data.to_unsafe_h
+            raw_payload:         event_data.respond_to?(:to_unsafe_h) ? event_data.to_unsafe_h : event_data
           }]
         end
 

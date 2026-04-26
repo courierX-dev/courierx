@@ -1,5 +1,24 @@
 import api from "./api"
 
+export type WebhookStatus =
+  | "not_configured"
+  | "auto"
+  | "manual"
+  | "needs_signing_key"
+  | "failed"
+  | "revoked"
+
+export interface ProviderWebhookSummary {
+  status: WebhookStatus
+  auto_managed: boolean
+  url: string | null
+  external_id: string | null
+  secret_present: boolean
+  last_error: string | null
+  last_synced_at: string | null
+  supports_auto: boolean
+}
+
 export interface ProviderConnection {
   id: string
   provider: string
@@ -16,6 +35,11 @@ export interface ProviderConnection {
   smtp_host: string | null
   smtp_port: number | null
   created_at: string
+  webhook?: ProviderWebhookSummary | null
+  /** @deprecated use webhook.url */
+  webhook_url?: string | null
+  /** @deprecated use webhook.secret_present */
+  webhook_secret_present?: boolean
   verification?: {
     verified: boolean
     error?: string
@@ -68,6 +92,30 @@ export const providersService = {
 
   async setConnectionStatus(id: string, status: "active" | "inactive"): Promise<ProviderConnection> {
     const { data } = await api.patch<ProviderConnection>(`/api/v1/provider_connections/${id}`, { status })
+    return data
+  },
+
+  async updateConnection(
+    id: string,
+    payload: Partial<{
+      display_name: string
+      priority: number
+      weight: number
+      mode: string
+      api_key: string
+      secret: string
+      webhook_secret: string
+      webhook_auto_managed: boolean
+    }>,
+  ): Promise<ProviderConnection> {
+    const { data } = await api.patch<ProviderConnection>(`/api/v1/provider_connections/${id}`, payload)
+    return data
+  },
+
+  async resyncWebhook(id: string): Promise<ProviderConnection> {
+    const { data } = await api.post<ProviderConnection>(
+      `/api/v1/provider_connections/${id}/resync_webhook`,
+    )
     return data
   },
 

@@ -209,6 +209,47 @@ func TestRouter_TransientErrorContinuesFailoverChain(t *testing.T) {
 	}
 }
 
+// Provider-permanent (e.g. domain not verified on Resend) means *this*
+// provider can't help — but the next one might. The chain must continue,
+// not stop like RecipientPermanentError does.
+func TestRouter_ProviderPermanentTriesNextProvider(t *testing.T) {
+	primary  := &providerPermanentErrorProvider{}
+	fallback := &countingProvider{}
+
+	r := &Router{
+		providers: []Provider{primary, fallback},
+		recorder:  nil,
+	}
+
+	_, err := r.Send(context.Background(), testRequest())
+	if err != nil {
+		t.Fatalf("expected fallback to succeed when primary returns provider-permanent, got %v", err)
+	}
+	if fallback.callCount != 1 {
+		t.Errorf("expected fallback to be called once, got %d", fallback.callCount)
+	}
+}
+
+// When every provider returns provider-permanent, the wrapped lastErr keeps
+// its classification so the API handler picks 422 (no-retry) instead of 502.
+func TestRouter_AllProviderPermanentPreservesClassification(t *testing.T) {
+	primary  := &providerPermanentErrorProvider{}
+	fallback := &providerPermanentErrorProvider{}
+
+	r := &Router{
+		providers: []Provider{primary, fallback},
+		recorder:  nil,
+	}
+
+	_, err := r.Send(context.Background(), testRequest())
+	if err == nil {
+		t.Fatal("expected error when both providers fail")
+	}
+	if got := ClassifyError(err); got != ErrorProviderPermanent {
+		t.Errorf("expected wrapped error to classify as provider_permanent, got %s", got)
+	}
+}
+
 // ── Empty provider list ───────────────────────────────────────────────────────
 
 func TestRouter_EmptyProviderListReturnsError(t *testing.T) {
@@ -250,17 +291,43 @@ func TestClassifyError_RateLimitTyped(t *testing.T) {
 	}
 }
 
-func TestClassifyError_PermanentByMessage(t *testing.T) {
+func TestClassifyError_RecipientPermanentByMessage(t *testing.T) {
+	// Strings that mean the *recipient* itself is unfixable. These stop the
+	// failover chain — no provider can deliver to a malformed address.
 	cases := []string{
 		"invalid email address",
+		"invalid recipient",
+		"no such user",
+		"user unknown",
+		"address rejected",
+		"mailbox does not exist",
+		"malformed",
+	}
+	for _, msg := range cases {
+		if got := ClassifyError(errors.New(msg)); got != ErrorRecipientPermanent {
+			t.Errorf("expected recipient_permanent for %q, got %s", msg, got)
+		}
+	}
+}
+
+func TestClassifyError_ProviderPermanentByMessage(t *testing.T) {
+	// Strings that mean *this provider* can't help (auth, setup, account).
+	// The router should skip this provider and try the next one — these
+	// must NOT stop the chain.
+	cases := []string{
 		"unauthorized",
 		"authentication failed",
 		"invalid api key",
+		"forbidden",
 		"domain not verified",
+		"unverified",
+		"invalid sender",
+		"account suspended",
+		"bad request",
 	}
 	for _, msg := range cases {
-		if ClassifyError(errors.New(msg)) != ErrorPermanent {
-			t.Errorf("expected permanent for %q", msg)
+		if got := ClassifyError(errors.New(msg)); got != ErrorProviderPermanent {
+			t.Errorf("expected provider_permanent for %q, got %s", msg, got)
 		}
 	}
 }
@@ -303,6 +370,18 @@ func (p *transientErrorProvider) Send(_ context.Context, _ *types.SendRequest) (
 }
 func (p *transientErrorProvider) Name() string         { return "transient" }
 func (p *transientErrorProvider) ValidateConfig() error { return nil }
+
+type providerPermanentErrorProvider struct{}
+
+func (p *providerPermanentErrorProvider) Send(_ context.Context, _ *types.SendRequest) (*types.SendResponse, error) {
+	return nil, &ProviderPermanentError{
+		Provider: "fakeprov",
+		Code:     403,
+		Message:  "domain not verified on this provider",
+	}
+}
+func (p *providerPermanentErrorProvider) Name() string          { return "fakeprov" }
+func (p *providerPermanentErrorProvider) ValidateConfig() error { return nil }
 
 type countingProvider struct {
 	callCount int

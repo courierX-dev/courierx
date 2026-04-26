@@ -46,6 +46,28 @@ export function useSetProviderConnectionStatus() {
   })
 }
 
+export function useUpdateProviderConnection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string
+      payload: Parameters<typeof providersService.updateConnection>[1]
+    }) => providersService.updateConnection(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["providerConnections"] }),
+  })
+}
+
+export function useResyncProviderWebhook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => providersService.resyncWebhook(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["providerConnections"] }),
+  })
+}
+
 export function useRoutingRules() {
   return useQuery({
     queryKey: ["routingRules"],

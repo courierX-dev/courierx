@@ -3,6 +3,14 @@ class ProviderConnection < ApplicationRecord
   MODES     = %w[byok managed].freeze
   STATUSES  = %w[active inactive degraded banned].freeze
 
+  # Providers we can auto-provision webhooks for via the provider's own API.
+  # SES needs SNS topics + IAM permissions (out of scope for one-click); SMTP
+  # has no webhook concept.
+  AUTO_WEBHOOK_PROVIDERS = %w[resend postmark sendgrid mailgun].freeze
+
+  # Webhook status lifecycle — see migration for descriptions.
+  WEBHOOK_STATUSES = %w[not_configured auto manual failed needs_signing_key revoked].freeze
+
   belongs_to :tenant
   has_many   :routing_rule_providers, dependent: :destroy
   has_many   :routing_rules, through: :routing_rule_providers
@@ -51,21 +59,44 @@ class ProviderConnection < ApplicationRecord
     @webhook_secret ||= decrypt_field(encrypted_webhook_secret)
   end
 
-  # Public webhook URL we hand the tenant. They paste this into their provider
-  # dashboard. Built on read so a base-URL change doesn't require a backfill.
+  # Public webhook URL we hand the tenant — either pasted into their provider
+  # dashboard (manual) or registered with the provider's API on their behalf
+  # (auto). Built on read so a base-URL change doesn't require a backfill.
   def webhook_url(base_url: ENV["PUBLIC_API_URL"])
     return nil if webhook_token.blank? || base_url.blank?
+    return nil unless AUTO_WEBHOOK_PROVIDERS.include?(provider)
 
-    case provider
-    when "resend"   then "#{base_url.chomp('/')}/api/v1/webhooks/resend/#{webhook_token}"
-    when "postmark" then "#{base_url.chomp('/')}/api/v1/webhooks/postmark/#{webhook_token}"
-    end
+    "#{base_url.chomp('/')}/api/v1/webhooks/#{provider}/#{webhook_token}"
   end
 
   # ── Public helpers ──────────────────────────────────────────────────────────
 
   def healthy?
     consecutive_failures < 5 && status == "active"
+  end
+
+  # True when CourierX is the source of truth for this connection's webhook
+  # configuration on the provider side. Used to decide whether destroy should
+  # call the provider's delete-webhook API before tearing down the record.
+  def webhook_auto?
+    webhook_auto_managed? && webhook_external_id.present?
+  end
+
+  # Public-facing summary of the webhook setup. Frontend renders a status pill
+  # and conditionally shows "Resync" / "Set up automatically" buttons.
+  def webhook_summary(base_url: ENV.fetch("PUBLIC_API_URL", nil))
+    return nil unless AUTO_WEBHOOK_PROVIDERS.include?(provider)
+
+    {
+      status:         webhook_status,
+      auto_managed:   webhook_auto_managed,
+      url:            webhook_url(base_url: base_url),
+      external_id:    webhook_external_id,
+      last_error:     webhook_last_error,
+      last_synced_at: webhook_last_synced_at,
+      secret_present: encrypted_webhook_secret.present?,
+      supports_auto:  true
+    }
   end
 
   private

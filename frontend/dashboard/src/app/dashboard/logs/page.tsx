@@ -10,6 +10,7 @@ import { SectionError } from "@/components/dashboard/inline-error"
 import { cn } from "@/lib/utils"
 import { useEmails } from "@/hooks/use-emails"
 import { EmailDetailDialog } from "@/components/dashboard/email-detail-dialog"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 
 const ALL_STATUSES = ["all", "queued", "sent", "delivered", "bounced", "complained", "failed", "suppressed"]
 
@@ -120,13 +121,14 @@ export default function LogsPage() {
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Message ID</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recipient</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Subject</th>
+              <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Provider</th>
               <th className="px-4 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6" aria-busy="true">
+                <td colSpan={6} className="px-4 py-6" aria-busy="true">
                   <div className="space-y-2">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="h-8 rounded bg-muted animate-pulse" />
@@ -136,7 +138,7 @@ export default function LogsPage() {
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
                   {search || status !== "all" ? "No messages match your filters." : "No logs yet. Email delivery logs will appear here once you start sending."}
                 </td>
               </tr>
@@ -161,6 +163,18 @@ export default function LogsPage() {
                   </td>
                   <td className="px-4 py-2 text-xs text-muted-foreground max-w-50 truncate hidden md:table-cell">
                     {email.subject}
+                  </td>
+                  <td className="px-4 py-2 hidden lg:table-cell">
+                    {email.provider ? (
+                      <div className="flex items-center gap-1.5">
+                        <ProviderIcon provider={email.provider} size={12} />
+                        <span className="text-[11px] text-muted-foreground">
+                          {email.provider_display_name ?? email.provider}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground/50">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2">
                     <span className={cn("text-xs font-medium", STATUS_COLOR[email.status] ?? "text-muted-foreground")}>

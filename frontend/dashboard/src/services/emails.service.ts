@@ -17,6 +17,8 @@ export interface EmailListItem {
   display_message: string | null
   display_cta: EmailDisplayCta | null
   last_error: string | null
+  provider: string | null
+  provider_display_name: string | null
   provider_message_id: string | null
   tags: string[]
   queued_at: string | null

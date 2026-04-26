@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { ProviderConnection } from "@/services/providers.service"
 import { ProviderIcon } from "@/components/ui/provider-icon"
+import { WebhookSetupSection } from "./webhook-setup-section"
 
 const PROVIDER_LABELS: Record<string, string> = {
   sendgrid: "SendGrid",
@@ -51,7 +52,7 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
 
   return (
     <Dialog open={!!conn} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <ProviderIcon
@@ -90,6 +91,12 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
           Credentials are encrypted at rest with AES-256. They are never returned to the dashboard
           after creation — to rotate, disconnect and reconnect with new keys.
         </p>
+
+        {conn.webhook?.supports_auto && (
+          <div className="rounded-md border border-border/60 bg-muted/10 p-3">
+            <WebhookSetupSection conn={conn} />
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>

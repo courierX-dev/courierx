@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { useEmails } from "@/hooks/use-emails"
 import { CampaignDetailDialog } from "./campaign-detail-dialog"
 import type { CampaignGroup } from "./types"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 
 const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
   delivered: { dot: "bg-success", text: "text-success" },
@@ -60,10 +61,16 @@ function CampaignsPageInner() {
         tags: [],
         sampleEmailId: email.id,
         fromEmail: email.from_email,
+        provider: email.provider,
+        providerDisplayName: email.provider_display_name,
       }
 
       if (!existing.lastActivity || email.created_at > existing.lastActivity) {
         existing.sampleEmailId = email.id
+        if (email.provider) {
+          existing.provider = email.provider
+          existing.providerDisplayName = email.provider_display_name
+        }
       }
 
       existing.totalSent++
@@ -229,8 +236,14 @@ function CampaignsPageInner() {
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                          <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        <div className="mt-0.5 shrink-0">
+                          {c.provider ? (
+                            <ProviderIcon provider={c.provider} size={18} chip />
+                          ) : (
+                            <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+                              <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                            </div>
+                          )}
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate max-w-[280px]">{c.subject}</p>

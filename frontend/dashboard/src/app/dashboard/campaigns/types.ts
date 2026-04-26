@@ -11,4 +11,6 @@ export interface CampaignGroup {
   tags: string[]
   sampleEmailId: string
   fromEmail: string
+  provider: string | null
+  providerDisplayName: string | null
 }

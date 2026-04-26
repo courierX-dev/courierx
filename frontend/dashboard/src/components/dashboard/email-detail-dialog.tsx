@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useEmail } from "@/hooks/use-emails"
+import { ProviderIcon } from "@/components/ui/provider-icon"
 
 const STATUS_COLOR: Record<string, string> = {
   delivered:  "text-success",
@@ -184,6 +185,9 @@ export function EmailDetailDialog({ emailId, onOpenChange }: Props) {
                   <span className={cn("font-medium capitalize w-24", STATUS_COLOR[ev.event_type] ?? "")}>
                     {ev.event_type}
                   </span>
+                  {ev.provider && (
+                    <ProviderIcon provider={ev.provider} size={12} />
+                  )}
                   <span className="text-muted-foreground font-mono text-[11px] truncate">
                     {ev.provider}
                     {ev.bounce_code ? ` · ${ev.bounce_code}` : ""}
