@@ -98,6 +98,7 @@ class CloudClient
 
     def connection(timeout:)
       Faraday.new(base_url) do |f|
+        f.response :follow_redirects, limit: 3
         f.options.timeout      = timeout
         f.options.open_timeout = [timeout, 2].min
       end

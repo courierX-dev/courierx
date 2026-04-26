@@ -23,6 +23,7 @@ gem "sidekiq", "~> 7.2"
 
 # HTTP Client (for calling Go Core)
 gem "faraday", "~> 2.8"
+gem "faraday-follow_redirects", "~> 0.3"
 
 # Environment Variables
 gem "dotenv", groups: [ :development, :test ]
