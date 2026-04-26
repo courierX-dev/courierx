@@ -27,11 +27,11 @@ module ProviderWebhookProvisioners
     ].freeze
 
     def provision(connection)
-      return failure("Missing API key") if connection.api_key.blank?
-      return failure("Missing Mailgun domain (smtp_host)") if connection.smtp_host.blank?
+      return failure("Mailgun API key not set on this connection") if connection.api_key.blank?
+      return failure("Mailgun sending domain not set on this connection") if connection.smtp_host.blank?
 
-      url = connection.webhook_url(base_url: public_base_url)
-      return failure("Missing webhook URL") if url.blank?
+      url, err = resolve_webhook_url(connection)
+      return err if err
 
       EVENT_IDS.each do |event_id|
         res = upsert_event_webhook(connection, event_id, url)

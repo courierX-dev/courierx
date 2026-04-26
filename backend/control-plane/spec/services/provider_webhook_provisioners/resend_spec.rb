@@ -15,7 +15,7 @@ RSpec.describe ProviderWebhookProvisioners::Resend do
       stub_request(:post, "https://api.resend.com/webhooks")
         .with(
           headers: { "Authorization" => "Bearer re_abc123" },
-          body: hash_including("endpoint_url" => connection.webhook_url)
+          body: hash_including("endpoint" => connection.webhook_url)
         )
         .to_return(
           status: 201,

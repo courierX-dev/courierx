@@ -41,7 +41,7 @@ class ProviderConnection < ApplicationRecord
 
   attr_writer :api_key, :secret, :webhook_secret
 
-  before_validation :ensure_webhook_token, on: :create
+  before_validation :ensure_webhook_token
   before_save       :encrypt_credentials
 
   def api_key
@@ -62,9 +62,17 @@ class ProviderConnection < ApplicationRecord
   # Public webhook URL we hand the tenant — either pasted into their provider
   # dashboard (manual) or registered with the provider's API on their behalf
   # (auto). Built on read so a base-URL change doesn't require a backfill.
+  #
+  # If webhook_token is missing (legacy row from before token generation was
+  # added), generate and persist one in-line so the URL is always available.
   def webhook_url(base_url: ENV["PUBLIC_API_URL"])
-    return nil if webhook_token.blank? || base_url.blank?
+    return nil if base_url.blank?
     return nil unless AUTO_WEBHOOK_PROVIDERS.include?(provider)
+
+    if webhook_token.blank?
+      ensure_webhook_token
+      save!(validate: false) if persisted?
+    end
 
     "#{base_url.chomp('/')}/api/v1/webhooks/#{provider}/#{webhook_token}"
   end

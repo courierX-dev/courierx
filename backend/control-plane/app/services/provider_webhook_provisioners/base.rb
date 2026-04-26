@@ -14,8 +14,40 @@ module ProviderWebhookProvisioners
 
     protected
 
+    # Public base URL the provider's webhooks should POST back to. Required
+    # for auto-provisioning — without it, we can't tell the provider where
+    # to send events.
+    #
+    # Resolution order:
+    #   1. PUBLIC_API_URL              — explicit, recommended for production
+    #   2. https://RAILWAY_PUBLIC_DOMAIN — auto-set on Railway-hosted services
+    #   3. nil                          — caller surfaces a config error to the UI
     def public_base_url
-      ENV.fetch("PUBLIC_API_URL", "https://api.courierx.dev")
+      explicit = ENV["PUBLIC_API_URL"].to_s.strip
+      return explicit unless explicit.empty?
+
+      railway = ENV["RAILWAY_PUBLIC_DOMAIN"].to_s.strip
+      return "https://#{railway}" unless railway.empty?
+
+      nil
+    end
+
+    # Resolve the inbound webhook URL for this connection, returning a
+    # tagged result so callers can short-circuit with a clear failure
+    # instead of generic "Missing webhook URL".
+    def resolve_webhook_url(connection)
+      base = public_base_url
+      if base.nil?
+        return [ nil, failure(
+          "Webhook setup needs PUBLIC_API_URL configured on the server. " \
+          "Ask your CourierX admin to set it (e.g. https://api.yourdomain.com)."
+        ) ]
+      end
+
+      url = connection.webhook_url(base_url: base)
+      return [ nil, failure("Couldn't build a webhook URL for this connection.") ] if url.nil?
+
+      [ url, nil ]
     end
 
     def http_request(method, url, headers: {}, body: nil, basic_auth: nil)

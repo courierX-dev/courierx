@@ -21,10 +21,10 @@ module ProviderWebhookProvisioners
     BASE_URL = "https://api.sendgrid.com"
 
     def provision(connection)
-      return failure("Missing API key") if connection.api_key.blank?
+      return failure("SendGrid API key not set on this connection") if connection.api_key.blank?
 
-      url = connection.webhook_url(base_url: public_base_url)
-      return failure("Missing webhook URL") if url.blank?
+      url, err = resolve_webhook_url(connection)
+      return err if err
 
       settings = http_request(:patch, "#{BASE_URL}/v3/user/webhooks/event/settings",
         headers: auth_header(connection),

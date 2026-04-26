@@ -22,10 +22,10 @@ module ProviderWebhookProvisioners
     BASE_URL = "https://api.postmarkapp.com"
 
     def provision(connection)
-      return failure("Missing server token") if connection.api_key.blank?
+      return failure("Postmark server token not set on this connection") if connection.api_key.blank?
 
-      url = connection.webhook_url(base_url: public_base_url)
-      return failure("Missing webhook URL") if url.blank?
+      url, err = resolve_webhook_url(connection)
+      return err if err
 
       # Reuse any previously-stored Basic Auth password — re-rotating on every
       # resync would invalidate Postmark's stored credential mid-flight.

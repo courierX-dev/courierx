@@ -5,8 +5,11 @@ module ProviderWebhookProvisioners
   # API: https://resend.com/docs/api-reference/webhooks/create-webhook
   #
   # POST /webhooks
-  #   body:  { endpoint_url, events: [...] }
-  #   200:   { id: "wh_...", endpoint_url, events, signing_secret: "whsec_..." }
+  #   body:  { endpoint, events: [...] }
+  #   200:   { id: "wh_...", endpoint, events, signing_secret: "whsec_..." }
+  #
+  # NOTE: Resend's field is `endpoint` (not `endpoint_url`). Sending the
+  # wrong key returns 422 "Missing `endpoint` field".
   #
   # The signing secret is returned in the create response only once — store it
   # immediately. Resend's webhook events use Svix (svix-id, svix-timestamp,
@@ -25,10 +28,10 @@ module ProviderWebhookProvisioners
     ].freeze
 
     def provision(connection)
-      return failure("Missing API key") if connection.api_key.blank?
-      return failure("Missing webhook URL") if connection.webhook_url(base_url: public_base_url).blank?
+      return failure("Resend API key not set on this connection") if connection.api_key.blank?
 
-      url = connection.webhook_url(base_url: public_base_url)
+      url, err = resolve_webhook_url(connection)
+      return err if err
 
       # If we already provisioned a webhook for this connection, update it
       # instead of creating a duplicate.
@@ -38,7 +41,7 @@ module ProviderWebhookProvisioners
 
       res = http_request(:post, "#{BASE_URL}/webhooks",
         headers: auth_header(connection),
-        body:    { endpoint_url: url, events: EVENTS }
+        body:    { endpoint: url, events: EVENTS }
       )
 
       return failure(error_message(res, "create webhook")) unless res[:status].between?(200, 201)
@@ -70,7 +73,7 @@ module ProviderWebhookProvisioners
     def update_existing(connection, url)
       res = http_request(:patch, "#{BASE_URL}/webhooks/#{connection.webhook_external_id}",
         headers: auth_header(connection),
-        body:    { endpoint_url: url, events: EVENTS }
+        body:    { endpoint: url, events: EVENTS }
       )
 
       # If the webhook is gone on Resend's side (deleted from their dashboard),
