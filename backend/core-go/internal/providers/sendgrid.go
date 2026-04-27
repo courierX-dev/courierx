@@ -96,6 +96,16 @@ func (p *SendGridProvider) Send(ctx context.Context, req *types.SendRequest) (*t
 		payload["categories"] = cats
 	}
 
+	// Open/click tracking — only meaningful when HTML is present, since the
+	// pixel and link rewriting both require HTML. Plain-text-only sends would
+	// just have the click tracker noop.
+	if req.HTML != "" {
+		payload["tracking_settings"] = map[string]interface{}{
+			"click_tracking": map[string]interface{}{"enable": true, "enable_text": false},
+			"open_tracking":  map[string]interface{}{"enable": true},
+		}
+	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("sendgrid: marshal error: %w", err)

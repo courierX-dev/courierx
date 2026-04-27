@@ -19,6 +19,17 @@ type SendRequest struct {
 	Metadata       map[string]string      `json:"metadata,omitempty"`
 	ProjectID      string                 `json:"projectId,omitempty"`
 	TenantID       string                 `json:"tenantId,omitempty"`
+	// EmailID is the Rails-side `emails.id` UUID. When present the tracking
+	// rewriter embeds it in pixel/click URLs so opens and clicks resolve back
+	// to the right email_events row. Empty in tests and direct API users.
+	EmailID string `json:"emailId,omitempty"`
+	// TrackOpens / TrackClicks toggle the first-party tracking rewriter for this
+	// send. The Control Plane resolves them from per-tenant settings (and any
+	// per-request override) before dispatch. False or unset means the rewriter
+	// is skipped — provider-native tracking still applies if the provider
+	// supports it.
+	TrackOpens  bool `json:"trackOpens,omitempty"`
+	TrackClicks bool `json:"trackClicks,omitempty"`
 	// Providers overrides the global provider chain for this request.
 	// Set by the Control Plane to pass per-tenant BYOK provider credentials.
 	// When empty the handler falls back to the globally configured provider chain.
@@ -62,6 +73,10 @@ type BulkSendRequest struct {
 	Tags       []string    `json:"tags,omitempty"`
 	ProjectID  string      `json:"projectId,omitempty"`
 	TenantID   string      `json:"tenantId,omitempty"`
+	// TrackOpens / TrackClicks toggle the first-party tracking rewriter for the
+	// whole batch. Per-recipient EmailID still drives the per-message URL.
+	TrackOpens  bool `json:"trackOpens,omitempty"`
+	TrackClicks bool `json:"trackClicks,omitempty"`
 	// Providers overrides the global provider chain for this batch.
 	Providers []Route `json:"providers,omitempty"`
 }
@@ -79,6 +94,10 @@ type BulkSendResponse struct {
 type Recipient struct {
 	Email     string                 `json:"email"`
 	Variables map[string]interface{} `json:"variables,omitempty"`
+	// EmailID is the Rails-side per-recipient `emails.id` UUID. Required when
+	// the batch has tracking enabled so per-recipient opens/clicks attribute
+	// to the right row.
+	EmailID string `json:"emailId,omitempty"`
 }
 
 // ProviderType is the name of a supported email provider.

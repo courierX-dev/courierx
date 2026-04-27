@@ -37,6 +37,7 @@ export interface ProviderConnection {
   region: string | null
   smtp_host: string | null
   smtp_port: number | null
+  ses_configuration_set: string | null
   created_at: string
   webhook?: ProviderWebhookSummary | null
   /** @deprecated use webhook.url */
@@ -71,6 +72,7 @@ export interface CreateProviderConnectionRequest {
   smtp_host?: string
   smtp_port?: number
   region?: string
+  ses_configuration_set?: string
 }
 
 export const providersService = {

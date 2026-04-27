@@ -69,11 +69,19 @@ class OutboxProcessorJob
       text:     email.text_body,
       tags:     email.tags,
       metadata: email.metadata,
-      tenantId: tenant.id
+      tenantId: tenant.id,
+      emailId:  email.id
     }
 
     payload[:replyTo]        = email.reply_to                   if email.reply_to.present?
     payload[:idempotencyKey] = event.payload["idempotency_key"] if event.payload["idempotency_key"].present?
+
+    # First-party tracking toggles. Resolved per-send so a per-request override
+    # in metadata can disable tracking for transactional flows (password
+    # resets, magic links) where opens/clicks aren't meaningful signal.
+    track_opens, track_clicks = resolve_tracking_flags(tenant, email)
+    payload[:trackOpens]  = true if track_opens
+    payload[:trackClicks] = true if track_clicks
 
     # Resolve which connections are eligible RIGHT NOW (cap usage and provider
     # health change between dispatch and processing). Demo-mode skips this and
@@ -189,6 +197,23 @@ class OutboxProcessorJob
     name.present? ? "#{name} <#{email_addr}>" : email_addr
   end
 
+  # Resolves the open/click tracking toggles for this send. Order of precedence:
+  # explicit `metadata.track_opens` / `metadata.track_clicks` on the email
+  # (string or boolean), else the tenant-level setting. We accept string values
+  # because metadata round-trips through JSON and tenants sometimes pass "false"
+  # from typed clients.
+  def resolve_tracking_flags(tenant, email)
+    meta = email.metadata || {}
+    opens  = meta.key?("track_opens")  ? truthy?(meta["track_opens"])  : tenant.tracking_opens?
+    clicks = meta.key?("track_clicks") ? truthy?(meta["track_clicks"]) : tenant.tracking_clicks?
+    [opens, clicks]
+  end
+
+  def truthy?(value)
+    return value if value == true || value == false
+    %w[true 1 yes on].include?(value.to_s.downcase)
+  end
+
   # Builds the Go-format providers[] array from the resolver's ordered
   # eligible-connection list. Each route carries the connection id so Go
   # can echo it back as connectionId on success (future change).
@@ -219,11 +244,17 @@ class OutboxProcessorJob
         "region" => connection.region.presence || "us"
       }
     when "aws_ses"
-      {
+      cfg = {
         "accessKeyId"     => connection.api_key,
         "secretAccessKey" => connection.secret,
         "region"          => connection.region.presence || "us-east-1"
       }
+      # ses_configuration_set is optional. When set, SES routes engagement
+      # events (open/click/bounce/complaint) through the SNS/Firehose pipeline
+      # the tenant configured on their AWS account, which is the only way to
+      # get provider-native open/click events out of SES.
+      cfg["configurationSet"] = connection.ses_configuration_set if connection.ses_configuration_set.present?
+      cfg
     when "postmark"
       { "serverToken" => connection.api_key }
     when "resend"

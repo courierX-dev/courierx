@@ -121,6 +121,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
     smtp_host: "",
     smtp_port: "",
     region: "",
+    ses_configuration_set: "",
   })
   const [error, setError] = useState("")
   const [verifyResult, setVerifyResult] = useState<{ verified: boolean; error?: string } | null>(null)
@@ -128,7 +129,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
   function reset() {
     setStep("select")
     setSelected(null)
-    setForm({ display_name: "", api_key: "", secret: "", smtp_host: "", smtp_port: "", region: "" })
+    setForm({ display_name: "", api_key: "", secret: "", smtp_host: "", smtp_port: "", region: "", ses_configuration_set: "" })
     setError("")
     setVerifyResult(null)
   }
@@ -176,6 +177,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
         payload.api_key = form.api_key
         payload.secret = form.secret
         payload.region = form.region
+        if (form.ses_configuration_set) payload.ses_configuration_set = form.ses_configuration_set
         break
       case "smtp":
         payload.smtp_host = form.smtp_host
@@ -384,6 +386,21 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
                         {AWS_REGIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ses_configuration_set">
+                      Configuration Set <span className="text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Input
+                      id="ses_configuration_set"
+                      placeholder="my-engagement-set"
+                      value={form.ses_configuration_set}
+                      onChange={set("ses_configuration_set")}
+                      autoComplete="off"
+                    />
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Required for SES open/click/bounce tracking. Create one in AWS with event publishing to SNS or Firehose, then enter its name here.
+                    </p>
                   </div>
                 </>
               )}

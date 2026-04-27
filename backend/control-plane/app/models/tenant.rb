@@ -38,6 +38,17 @@ class Tenant < ApplicationRecord
   after_commit :publish_tenant_created_event, on: :create
   after_commit :publish_tenant_updated_event, on: :update, if: :saved_change_to_cloud_relevant_attrs?
 
+  # First-party open/click tracking toggles. Stored under settings["tracking"]
+  # so we don't carry a migration for two booleans. Default = on; tenants opt
+  # out for privacy reasons rather than opting in.
+  def tracking_opens?
+    settings.dig("tracking", "opens") != false
+  end
+
+  def tracking_clicks?
+    settings.dig("tracking", "clicks") != false
+  end
+
   # Promote demo → byok if all prerequisites are now met. Only called from
   # the explicit activation path (email-verification hook or admin action);
   # never from model callbacks, so "demo" is a deliberate state the user

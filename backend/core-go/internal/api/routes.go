@@ -3,10 +3,13 @@ package api
 import (
 	"crypto/subtle"
 
+	"time"
+
 	"github.com/courierx/core-go/internal/config"
 	"github.com/courierx/core-go/internal/middleware"
 	"github.com/courierx/core-go/internal/observability"
 	"github.com/courierx/core-go/internal/ratelimit"
+	"github.com/courierx/core-go/internal/tracking"
 	"github.com/courierx/core-go/internal/types"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
@@ -20,7 +23,15 @@ func SetupRoutes(app *fiber.App, dbPool *pgxpool.Pool, cfg *config.Config, prom 
 
 	idem    := middleware.NewIdempotencyStore(cfg.IdempotencyTTLSeconds, cfg.RedisURL)
 	limiter := ratelimit.New(cfg.RateLimitProvider)
-	handler := NewHandler(dbPool, routes, prom, idem, cfg.MaxWorkers)
+
+	// Tracking — first-party open/click. The rewriter is a no-op when either
+	// TRACKING_BASE_URL or TRACKING_SECRET is empty, so unconfigured
+	// deployments behave exactly as before.
+	signer    := tracking.NewSigner(cfg.TrackingSecret, 90*24*time.Hour)
+	rewriter  := tracking.NewRewriter(signer, cfg.TrackingBaseURL)
+	trackHand := tracking.NewHandler(signer, dbPool)
+
+	handler := NewHandler(dbPool, routes, rewriter, prom, idem, cfg.MaxWorkers)
 
 	// ── Global middleware (applied to all routes) ─────────────────────────────
 	app.Use(middleware.RequestID())
@@ -30,6 +41,13 @@ func SetupRoutes(app *fiber.App, dbPool *pgxpool.Pool, cfg *config.Config, prom 
 	app.Get("/health",       handler.HealthCheck)
 	app.Get("/health/live",  handler.HealthLive)
 	app.Get("/health/ready", handler.HealthReady)
+
+	// ── Public tracking endpoints (unauthenticated, HMAC-token in URL) ────────
+	// Recipients hit these directly from their email client. Authentication is
+	// the signed token; mounting under /t keeps the URL short — every
+	// rewritten link in every email contains it.
+	app.Get("/t/o/:token", trackHand.Open)
+	app.Get("/t/c/:token", trackHand.Click)
 
 	// ── Prometheus metrics scrape endpoint ────────────────────────────────────
 	// SECURITY: Protected by bearer token when METRICS_TOKEN is set.

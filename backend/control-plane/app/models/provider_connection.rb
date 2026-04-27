@@ -83,6 +83,30 @@ class ProviderConnection < ApplicationRecord
     consecutive_failures < 5 && status == "active"
   end
 
+  # Live success rate / latency / volume computed from the emails table over a
+  # rolling window. The persisted `success_rate` / `avg_latency_ms` columns
+  # only reflect verify-call health checks, not actual send outcomes — this
+  # is what the dashboard surfaces.
+  def live_stats(window: 24.hours)
+    scope     = emails.where("emails.created_at >= ?", window.ago)
+    delivered = scope.where(status: %w[sent delivered]).count
+    failed    = scope.where(status: %w[bounced complained failed]).count
+    total     = delivered + failed
+
+    latency_ms = scope.where.not(sent_at: nil).pluck(
+      Arel.sql("EXTRACT(EPOCH FROM (sent_at - queued_at)) * 1000")
+    )
+    avg_latency = latency_ms.any? ? (latency_ms.sum / latency_ms.size).round : nil
+
+    {
+      success_rate:    total.positive? ? (delivered.to_f / total) : nil,
+      avg_latency_ms:  avg_latency,
+      sent_count:      delivered,
+      failed_count:    failed,
+      window_hours:    (window / 3600).to_i
+    }
+  end
+
   # True when CourierX is the source of truth for this connection's webhook
   # configuration on the provider side. Used to decide whether destroy should
   # call the provider's delete-webhook API before tearing down the record.

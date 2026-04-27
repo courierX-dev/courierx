@@ -70,6 +70,7 @@ module Api
               open_rate: open_rate
             },
             daily: daily,
+            tracking_coverage: tracking_coverage(emails),
             providers: tenant.provider_connections.active.map { |pc|
               {
                 id: pc.id,
@@ -81,6 +82,49 @@ module Api
               }
             }
           }
+        end
+
+        private
+
+        # tracking_coverage breaks down opens/clicks by which source detected
+        # them. With both first-party (provider="courierx") and provider-native
+        # webhook events stored in email_events, a single open can produce two
+        # rows per email_id. We surface three buckets per event_type:
+        #
+        #   first_party_only — only our pixel/redirector saw it (provider's
+        #                      tracking was off, blocked, or unsupported)
+        #   provider_only    — only the provider webhook saw it (recipient
+        #                      hit "show images" after our token expired,
+        #                      or our rewriter was disabled for that send)
+        #   both             — both sources saw it (the healthy state)
+        #
+        # The aggregate `opened` total in `totals` already dedupes by email_id
+        # (.distinct.count("emails.id")) — this just splits that total by source.
+        def tracking_coverage(emails)
+          rows = emails
+            .joins(:email_events)
+            .where(email_events: { event_type: %w[opened clicked] })
+            .group("emails.id", "email_events.event_type")
+            .pluck(
+              "email_events.event_type",
+              Arel.sql("BOOL_OR(email_events.provider = 'courierx') AS has_first_party"),
+              Arel.sql("BOOL_OR(email_events.provider <> 'courierx') AS has_provider")
+            )
+
+          %w[opened clicked].each_with_object({}) do |event_type, acc|
+            buckets = { first_party_only: 0, provider_only: 0, both: 0 }
+            rows.each do |type, has_first_party, has_provider|
+              next unless type == event_type
+              if has_first_party && has_provider
+                buckets[:both] += 1
+              elsif has_first_party
+                buckets[:first_party_only] += 1
+              elsif has_provider
+                buckets[:provider_only] += 1
+              end
+            end
+            acc[event_type] = buckets
+          end
         end
       end
     end

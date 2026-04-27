@@ -13,6 +13,10 @@ import (
 )
 
 // ResendProvider sends email via the Resend API (api.resend.com).
+//
+// Note on tracking: Resend has no per-message tracking flag. Open and click
+// tracking are toggled per-domain in the Resend dashboard, and webhook events
+// only fire when domain-level tracking is enabled there.
 type ResendProvider struct {
 	apiKey string
 	client *http.Client

@@ -11,6 +11,7 @@ import (
 	"github.com/courierx/core-go/internal/observability"
 	"github.com/courierx/core-go/internal/providers"
 	"github.com/courierx/core-go/internal/template"
+	"github.com/courierx/core-go/internal/tracking"
 	"github.com/courierx/core-go/internal/types"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ type Handler struct {
 	dbPool         *pgxpool.Pool
 	router         *providers.Router
 	templateEngine *template.Engine
+	rewriter       *tracking.Rewriter
 	prom           *observability.Prom
 	idempotency    *middleware.IdempotencyStore
 	maxWorkers     int
@@ -32,6 +34,7 @@ type Handler struct {
 func NewHandler(
 	dbPool *pgxpool.Pool,
 	routes []types.Route,
+	rewriter *tracking.Rewriter,
 	prom *observability.Prom,
 	idem *middleware.IdempotencyStore,
 	maxWorkers int,
@@ -40,6 +43,7 @@ func NewHandler(
 		dbPool:         dbPool,
 		router:         providers.NewRouter(routes, prom),
 		templateEngine: template.NewEngine(),
+		rewriter:       rewriter,
 		prom:           prom,
 		idempotency:    idem,
 		maxWorkers:     maxWorkers,
@@ -185,6 +189,16 @@ func (h *Handler) Send(c *fiber.Ctx) error {
 		})
 	}
 
+	// First-party tracking — applied after template render so per-recipient
+	// variables are already substituted into URLs we rewrite. A rewrite error
+	// is logged but never blocks the send (the original HTML is preserved).
+	if rewritten, err := h.rewriter.Rewrite(req.HTML, req.EmailID, req.TenantID, req.TrackOpens, req.TrackClicks); err == nil {
+		req.HTML = rewritten
+	} else {
+		slog.Warn("tracking rewrite failed; sending un-tracked",
+			"request_id", requestID, "email_id", req.EmailID, "error", err)
+	}
+
 	// BYOK: if the request carries per-tenant provider routes, build a
 	// request-scoped router from them; otherwise fall back to the global router.
 	router := h.routerForRequest(req.Providers)
@@ -321,21 +335,31 @@ func (h *Handler) BulkSend(c *fiber.Ctx) error {
 
 func (h *Handler) sendOne(ctx context.Context, batch types.BulkSendRequest, recipient types.Recipient) types.SendResponse {
 	sendReq := types.SendRequest{
-		From:      batch.From,
-		To:        recipient.Email,
-		Subject:   batch.Subject,
-		HTML:      batch.HTML,
-		Text:      batch.Text,
-		ReplyTo:   batch.ReplyTo,
-		Variables: recipient.Variables,
-		Tags:      batch.Tags,
-		ProjectID: batch.ProjectID,
-		TenantID:  batch.TenantID,
-		Providers: batch.Providers,
+		From:        batch.From,
+		To:          recipient.Email,
+		Subject:     batch.Subject,
+		HTML:        batch.HTML,
+		Text:        batch.Text,
+		ReplyTo:     batch.ReplyTo,
+		Variables:   recipient.Variables,
+		Tags:        batch.Tags,
+		ProjectID:   batch.ProjectID,
+		TenantID:    batch.TenantID,
+		EmailID:     recipient.EmailID,
+		TrackOpens:  batch.TrackOpens,
+		TrackClicks: batch.TrackClicks,
+		Providers:   batch.Providers,
 	}
 
 	if err := h.renderRequest(&sendReq); err != nil {
 		return types.SendResponse{Success: false, Error: err.Error()}
+	}
+
+	if rewritten, err := h.rewriter.Rewrite(sendReq.HTML, sendReq.EmailID, sendReq.TenantID, sendReq.TrackOpens, sendReq.TrackClicks); err == nil {
+		sendReq.HTML = rewritten
+	} else {
+		slog.Warn("tracking rewrite failed in batch; sending un-tracked",
+			"email_id", sendReq.EmailID, "error", err)
 	}
 
 	// BYOK: build a request-scoped router if providers were supplied.

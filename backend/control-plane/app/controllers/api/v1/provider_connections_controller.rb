@@ -123,7 +123,8 @@ module Api
         # Never expose the encrypted_* columns directly to clients.
         params.permit(:provider, :mode, :status, :display_name, :weight, :priority,
                        :region, :smtp_host, :smtp_port,
-                       :api_key, :secret, :webhook_secret, :webhook_auto_managed)
+                       :api_key, :secret, :webhook_secret, :webhook_auto_managed,
+                       :ses_configuration_set)
       end
 
       def auto_webhook_eligible?(connection)
@@ -144,13 +145,23 @@ module Api
       end
 
       def connection_json(c)
+        live = c.live_stats
+
         json = {
           id: c.id, provider: c.provider, mode: c.mode, status: c.status,
           display_name: c.display_name, weight: c.weight, priority: c.priority,
-          success_rate: c.success_rate, avg_latency_ms: c.avg_latency_ms,
+          # Live email-derived stats. The persisted columns are not used here
+          # because they're written by health-check jobs in mixed units
+          # (percent vs ratio) and don't reflect actual send outcomes.
+          success_rate:         live[:success_rate],
+          avg_latency_ms:       live[:avg_latency_ms],
+          sent_count:           live[:sent_count],
+          failed_count:         live[:failed_count],
+          stats_window_hours:   live[:window_hours],
           consecutive_failures: c.consecutive_failures,
           last_health_check_at: c.last_health_check_at,
           region: c.region, smtp_host: c.smtp_host, smtp_port: c.smtp_port,
+          ses_configuration_set: c.ses_configuration_set,
           created_at: c.created_at
         }
 

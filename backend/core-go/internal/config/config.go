@@ -65,6 +65,14 @@ type Config struct {
 	// Control Plane (for pulling provider configs at boot)
 	ControlPlaneURL string
 
+	// Tracking — first-party open/click tracking layer that augments provider-native
+	// tracking. TrackingBaseURL is the public origin recipients hit when opening
+	// an email or clicking a link (e.g. https://track.courierx.example). Tokens
+	// in those URLs are HMAC-signed with TrackingSecret. When either is empty the
+	// rewriter is a no-op and provider-native tracking is the only signal.
+	TrackingBaseURL string
+	TrackingSecret  string
+
 	// Idempotency
 	IdempotencyTTLSeconds int // seconds to retain idempotency keys (default 86400 = 24h)
 
@@ -109,6 +117,9 @@ func Load() *Config {
 		MetricsToken:   getEnv("METRICS_TOKEN", ""),
 
 		ControlPlaneURL: getEnv("CONTROL_PLANE_URL", "http://localhost:4000"),
+
+		TrackingBaseURL: getEnv("TRACKING_BASE_URL", ""),
+		TrackingSecret:  getEnv("TRACKING_SECRET", ""),
 
 		IdempotencyTTLSeconds: getEnvInt("IDEMPOTENCY_TTL", 86400),
 

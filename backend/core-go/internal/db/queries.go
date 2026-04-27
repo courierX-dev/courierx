@@ -91,3 +91,40 @@ func nullString(s string) interface{} {
 	}
 	return s
 }
+
+// EmailEventInput is the payload for InsertEmailEvent. We only model the
+// columns first-party tracking fills in — bounce_* and raw_payload come from
+// provider webhook ingestion in Rails.
+type EmailEventInput struct {
+	EmailID   string
+	EventType string // "opened" | "clicked"
+	Provider  string // "courierx" for first-party events
+	LinkURL   string // populated for clicked events
+	IPAddress string
+	UserAgent string
+}
+
+// InsertEmailEvent records a first-party open/click event. Times are set to
+// now() — we don't trust client clocks. raw_payload defaults to {} per the
+// schema's NOT NULL default.
+func InsertEmailEvent(ctx context.Context, pool *pgxpool.Pool, in EmailEventInput) error {
+	if pool == nil {
+		return nil
+	}
+	_, err := pool.Exec(ctx, `
+		INSERT INTO email_events (
+			email_id, event_type, provider, link_url, ip_address, user_agent,
+			occurred_at, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			now(), now(), now()
+		)`,
+		in.EmailID,
+		in.EventType,
+		in.Provider,
+		nullString(in.LinkURL),
+		nullString(in.IPAddress),
+		nullString(in.UserAgent),
+	)
+	return err
+}

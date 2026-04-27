@@ -21,10 +21,11 @@ import (
 
 // SESProvider sends email via the AWS SES v2 API.
 type SESProvider struct {
-	accessKey string
-	secretKey string
-	region    string
-	client    *http.Client
+	accessKey        string
+	secretKey        string
+	region           string
+	configurationSet string // optional — required for open/click tracking
+	client           *http.Client
 }
 
 // NewSESProvider validates config and returns a ready provider.
@@ -32,6 +33,7 @@ func NewSESProvider(config map[string]interface{}) (*SESProvider, error) {
 	accessKey, _ := config["accessKeyId"].(string)
 	secretKey, _ := config["secretAccessKey"].(string)
 	region, _ := config["region"].(string)
+	configSet, _ := config["configurationSet"].(string)
 
 	if accessKey == "" || secretKey == "" {
 		return nil, fmt.Errorf("ses: accessKeyId and secretAccessKey are required")
@@ -41,20 +43,22 @@ func NewSESProvider(config map[string]interface{}) (*SESProvider, error) {
 	}
 
 	return &SESProvider{
-		accessKey: accessKey,
-		secretKey: secretKey,
-		region:    region,
-		client:    &http.Client{Timeout: 30 * time.Second},
+		accessKey:        accessKey,
+		secretKey:        secretKey,
+		region:           region,
+		configurationSet: configSet,
+		client:           &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 
 // SES v2 request types
 type sesEmailRequest struct {
-	FromEmailAddress  string          `json:"FromEmailAddress"`
-	ReplyToAddresses  []string        `json:"ReplyToAddresses,omitempty"`
-	Destination       sesDestination  `json:"Destination"`
-	Content           sesEmailContent `json:"Content"`
-	EmailTags         []sesTag        `json:"EmailTags,omitempty"`
+	FromEmailAddress     string          `json:"FromEmailAddress"`
+	ReplyToAddresses     []string        `json:"ReplyToAddresses,omitempty"`
+	Destination          sesDestination  `json:"Destination"`
+	Content              sesEmailContent `json:"Content"`
+	EmailTags            []sesTag        `json:"EmailTags,omitempty"`
+	ConfigurationSetName string          `json:"ConfigurationSetName,omitempty"`
 }
 
 type sesDestination struct {
@@ -99,6 +103,13 @@ func (p *SESProvider) Send(ctx context.Context, req *types.SendRequest) (*types.
 
 	if req.ReplyTo != "" {
 		sesReq.ReplyToAddresses = []string{req.ReplyTo}
+	}
+
+	// Open/click tracking on SES requires a Configuration Set with event
+	// publishing wired to SNS/Firehose. If the tenant didn't supply one,
+	// we silently send without tracking — SES has no per-message toggle.
+	if p.configurationSet != "" {
+		sesReq.ConfigurationSetName = p.configurationSet
 	}
 
 	body := sesBody{}
