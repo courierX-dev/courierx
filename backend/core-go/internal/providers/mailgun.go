@@ -59,6 +59,11 @@ func (p *MailgunProvider) Send(ctx context.Context, req *types.SendRequest) (*ty
 	}
 	if req.HTML != "" {
 		fields["html"] = req.HTML
+		// Open/click tracking only meaningful for HTML — opens use a pixel,
+		// clicks rewrite anchor tags. Mailgun ignores these for text-only.
+		fields["o:tracking"] = "yes"
+		fields["o:tracking-opens"] = "yes"
+		fields["o:tracking-clicks"] = "yes"
 	}
 	if req.Text != "" {
 		fields["text"] = req.Text
