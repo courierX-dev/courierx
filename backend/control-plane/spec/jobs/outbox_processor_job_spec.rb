@@ -191,4 +191,36 @@ RSpec.describe OutboxProcessorJob do
       body: hash_including("replyTo" => "replies@example.com")
     )
   end
+
+  # ── Metadata coercion ─────────────────────────────────────────────────────
+  # Go's SendRequest.Metadata is map[string]string. Non-string values used to
+  # 400 the entire request and silently fail the email. Rails must coerce.
+
+  it "stringifies bool/numeric metadata values before sending to Go" do
+    email.update!(metadata: { "order_id" => 12_345, "is_test" => true, "tier" => "pro" })
+    described_class.new.perform(outbox.id)
+    expect(WebMock).to have_requested(:post, /v1\/send/).with(
+      body: hash_including("metadata" => {
+        "order_id" => "12345",
+        "is_test"  => "true",
+        "tier"     => "pro"
+      })
+    )
+  end
+
+  it "drops track_opens/track_clicks from metadata (already promoted to top-level)" do
+    email.update!(metadata: { "track_opens" => "true", "track_clicks" => "true", "purpose" => "tx" })
+    described_class.new.perform(outbox.id)
+    expect(WebMock).to have_requested(:post, /v1\/send/).with(
+      body: hash_including("metadata" => { "purpose" => "tx" }, "trackOpens" => true, "trackClicks" => true)
+    )
+  end
+
+  it "JSON-encodes nested metadata values" do
+    email.update!(metadata: { "ctx" => { "page" => "checkout", "step" => 2 } })
+    described_class.new.perform(outbox.id)
+    expect(WebMock).to have_requested(:post, /v1\/send/).with(
+      body: hash_including("metadata" => { "ctx" => '{"page":"checkout","step":2}' })
+    )
+  end
 end

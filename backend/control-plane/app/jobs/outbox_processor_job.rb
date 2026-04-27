@@ -68,7 +68,7 @@ class OutboxProcessorJob
       html:     email.html_body,
       text:     email.text_body,
       tags:     email.tags,
-      metadata: email.metadata,
+      metadata: prepare_metadata_for_go(email.metadata),
       tenantId: tenant.id,
       emailId:  email.id
     }
@@ -212,6 +212,24 @@ class OutboxProcessorJob
   def truthy?(value)
     return value if value == true || value == false
     %w[true 1 yes on].include?(value.to_s.downcase)
+  end
+
+  # Go's SendRequest.Metadata is map[string]string — non-string values 400 the
+  # whole request. Strip the tracking control keys (already promoted to
+  # trackOpens/trackClicks) and coerce remaining scalars to strings. Nested
+  # values are JSON-encoded so the tenant doesn't lose data.
+  def prepare_metadata_for_go(metadata)
+    return nil if metadata.blank?
+    metadata
+      .reject { |k, _| %w[track_opens track_clicks].include?(k.to_s) }
+      .each_with_object({}) do |(k, v), h|
+        next if v.nil?
+        h[k.to_s] = case v
+                   when String         then v
+                   when TrueClass, FalseClass, Numeric, Symbol then v.to_s
+                   else v.to_json
+                   end
+      end
   end
 
   # Builds the Go-format providers[] array from the resolver's ordered

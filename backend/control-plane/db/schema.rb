@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_26_170000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_27_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -266,6 +266,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_26_170000) do
     t.integer "priority", default: 1, null: false
     t.string "provider", null: false
     t.string "region"
+    t.string "ses_configuration_set"
     t.string "smtp_host"
     t.integer "smtp_port"
     t.string "status", default: "active", null: false
