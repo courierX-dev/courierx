@@ -148,9 +148,9 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
 
   return (
     <Dialog open={!!conn} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden grid-cols-[minmax(0,1fr)]">
         {/* Header */}
-        <DialogHeader className="px-5 pt-5 pb-4 border-b">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b min-w-0">
           <div className="flex items-start gap-3 min-w-0 pr-7">
             <ProviderIcon
               provider={conn.provider}
@@ -183,8 +183,12 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
         </DialogHeader>
 
         {/* Tabs */}
-        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="w-full">
-          <div className="px-5 pt-3 border-b">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as typeof tab)}
+          className="w-full min-w-0"
+        >
+          <div className="px-5 pt-3 border-b min-w-0">
             <TabsList variant="line" className="w-full justify-start gap-3 h-9 bg-transparent p-0">
               <TabsTrigger value="performance" className="text-xs h-9 gap-1.5 px-1">
                 <Activity className="h-3.5 w-3.5" />
@@ -209,8 +213,11 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
             </TabsList>
           </div>
 
-          <div className="px-5 py-4 max-h-[60vh] overflow-y-auto overflow-x-hidden">
-            <TabsContent value="performance" className="mt-0 space-y-4">
+          <div className="px-5 py-4 max-h-[60vh] overflow-y-auto overflow-x-hidden min-w-0">
+            <TabsContent
+              value="performance"
+              className="mt-0 space-y-4 min-w-0 data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200"
+            >
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">
                   Live send health from this connection
@@ -276,7 +283,10 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
               )}
             </TabsContent>
 
-            <TabsContent value="configuration" className="mt-0 space-y-3">
+            <TabsContent
+              value="configuration"
+              className="mt-0 space-y-3 min-w-0 data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200"
+            >
               <div className="rounded-md border bg-card px-3.5">
                 <ConfigRow label="Priority" value={conn.priority} />
                 <ConfigRow label="Weight" value={conn.weight} />
@@ -307,7 +317,10 @@ export function ProviderDetailDialog({ conn, onOpenChange, onVerify, isVerifying
             </TabsContent>
 
             {showWebhookTab && (
-              <TabsContent value="webhook" className="mt-0">
+              <TabsContent
+                value="webhook"
+                className="mt-0 min-w-0 data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200"
+              >
                 <WebhookSetupSection conn={conn} />
               </TabsContent>
             )}

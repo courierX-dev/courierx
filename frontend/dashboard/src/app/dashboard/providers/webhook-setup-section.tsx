@@ -203,13 +203,18 @@ export function WebhookSetupSection({ conn }: { conn: ProviderConnection }) {
     }
   }
 
+  // When healthy + auto-managed, collapse to a compact view: status pill +
+  // endpoint + Refresh. The verbose explanation only matters when something
+  // needs attention or hasn't been set up yet.
+  const isCompact = wh.status === "auto" && !recentlyQueued
+
   return (
-    <div className="space-y-3">
-      {/* Header — always visible, explains *what* this is. */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Webhook className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Event webhook</span>
+    <div className="space-y-3 min-w-0">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Webhook className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium truncate">Event webhook</span>
         </div>
         <span
           className={cn(
@@ -217,26 +222,35 @@ export function WebhookSetupSection({ conn }: { conn: ProviderConnection }) {
             TONE_CLASSES[copy.tone],
           )}
           aria-label={`Webhook status: ${copy.label}`}
+          title={
+            isCompact && wh.last_synced_at
+              ? `Last synced ${new Date(wh.last_synced_at).toLocaleString()}`
+              : undefined
+          }
         >
           {copy.tone === "pending" && <Loader2 className="h-3 w-3 animate-spin" />}
           {copy.label}
         </span>
       </div>
 
-      {/* What this is — only show on the "not yet" states. Once set up, the
-          status pill + URL row tell the whole story. */}
+      {/* "Why webhooks matter" callout — only on the unconfigured states. */}
       {(wh.status === "not_configured" || wh.status === "revoked") && (
-        <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/20 p-2.5 text-[11px] text-muted-foreground">
+        <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/20 p-2.5 text-[11px] text-muted-foreground min-w-0">
           <Info className="h-3.5 w-3.5 mt-px shrink-0" />
-          <p>
-            Without a webhook, the dashboard will show emails as <span className="font-mono">sent</span>{" "}
-            but never as <span className="font-mono">delivered</span>, <span className="font-mono">bounced</span>, or{" "}
-            <span className="font-mono">opened</span>. {providerName} signs every event so we can verify it really came from them.
+          <p className="wrap-break-word min-w-0">
+            Without a webhook, emails show as <span className="font-mono">sent</span> but never{" "}
+            <span className="font-mono">delivered</span>, <span className="font-mono">bounced</span>, or{" "}
+            <span className="font-mono">opened</span>.
           </p>
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground leading-relaxed">{copy.description}</p>
+      {/* Verbose description — hidden in compact mode. */}
+      {!isCompact && (
+        <p className="text-xs text-muted-foreground leading-relaxed wrap-break-word min-w-0">
+          {copy.description}
+        </p>
+      )}
 
       {wh.url && wh.status === "auto" && (
         <div className="flex items-center gap-2 rounded-md border border-border bg-muted/20 px-2 py-1.5 min-w-0">
@@ -282,7 +296,7 @@ export function WebhookSetupSection({ conn }: { conn: ProviderConnection }) {
         saving={updateConn.isPending}
       />
 
-      <div className="flex flex-wrap items-center gap-2 pt-1">
+      <div className="flex flex-wrap items-center gap-2 pt-1 min-w-0">
         <Actions
           summary={wh}
           providerName={providerName}
@@ -294,7 +308,9 @@ export function WebhookSetupSection({ conn }: { conn: ProviderConnection }) {
         />
       </div>
 
-      {wh.last_synced_at && (
+      {/* Last-synced shown inline only on non-compact states; compact moves
+          it into the status pill's tooltip to free vertical space. */}
+      {wh.last_synced_at && !isCompact && (
         <p className="text-[10px] text-muted-foreground">
           Last synced {new Date(wh.last_synced_at).toLocaleString()}
         </p>
