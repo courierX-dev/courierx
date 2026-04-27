@@ -57,6 +57,15 @@ module Api
             head :unauthorized and return
           end
 
+          # Replay protection — match Resend (5 min) and Mailgun (5 min). The
+          # signature itself is bound to `timestamp + body`, so an attacker
+          # can't tamper with timestamp; but they CAN replay a captured
+          # request indefinitely without this check.
+          if (Time.now.to_i - timestamp.to_i).abs > 300
+            Rails.logger.warn("[SendGrid Webhook] Stale timestamp (drift > 5min) — rejecting")
+            head :unauthorized and return
+          end
+
           begin
             public_key = OpenSSL::PKey::EC.new(Base64.decode64(verification_key))
             payload    = timestamp + raw_body

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2, ExternalLink, CheckCircle2, XCircle } from "lucide-react"
+import { Loader2, ExternalLink, CheckCircle2, XCircle, ArrowLeft, ShieldCheck, Lightbulb } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -212,71 +212,102 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {step === "select" ? "Connect provider" : `Connect ${providerMeta?.name}`}
-          </DialogTitle>
-          <DialogDescription>
-            {step === "select"
-              ? "Choose an email provider to connect your account."
-              : "Enter your API credentials. They are encrypted at rest and verified server-side."}
-          </DialogDescription>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border/60">
+          {step === "select" ? (
+            <>
+              <DialogTitle className="text-base">Connect a provider</DialogTitle>
+              <DialogDescription className="text-xs">
+                Choose an email provider to connect with your own credentials. CourierX never stores or sends through its own infrastructure.
+              </DialogDescription>
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <ProviderIcon provider={selected!} size={22} chip />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base truncate">Connect {providerMeta?.name}</DialogTitle>
+                <DialogDescription className="text-xs truncate">
+                  {providerMeta?.description}
+                </DialogDescription>
+              </div>
+              <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-2 py-1 rounded-full border border-border/60 bg-muted/40">
+                Step 2 of 2
+              </span>
+            </div>
+          )}
         </DialogHeader>
 
         {step === "select" ? (
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {PROVIDERS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => handleSelect(p.id)}
-                className={cn(
-                  "flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors",
-                  "hover:bg-muted/40 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/30",
-                )}
-              >
-                <ProviderIcon provider={p.id} size={18} chip />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium">{p.name}</span>
-                  <span className="text-[11px] text-muted-foreground mt-0.5">{p.description}</span>
-                </div>
-              </button>
-            ))}
+          <div className="px-5 py-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => handleSelect(p.id)}
+                  className={cn(
+                    "group flex items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-all",
+                    "hover:bg-muted/40 hover:border-primary/40 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30",
+                  )}
+                >
+                  <ProviderIcon provider={p.id} size={20} chip />
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-sm font-medium leading-tight">{p.name}</span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{p.description}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 p-2.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                All credentials are encrypted at rest with AES-256 and verified server-side. We will test the connection before saving.
+              </p>
+            </div>
           </div>
         ) : (
-          <div className="space-y-5 mt-2">
+          <div className="px-5 py-4 space-y-4">
             {/* Setup guide */}
             {guide && (
-              <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
-                <p className="text-xs font-medium text-foreground">Setup guide</p>
-                <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                  {guide.steps.map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ol>
-                {guide.docsUrl && (
-                  <a
-                    href={guide.docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    View documentation
-                  </a>
-                )}
-              </div>
+              <details className="group rounded-lg border border-border/60 bg-muted/20 overflow-hidden" open>
+                <summary className="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <div className="flex items-center gap-2">
+                    <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-foreground">How to get your credentials</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground group-open:hidden">Show</span>
+                  <span className="text-[10px] text-muted-foreground hidden group-open:inline">Hide</span>
+                </summary>
+                <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/40">
+                  <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside leading-relaxed">
+                    {guide.steps.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ol>
+                  {guide.docsUrl && (
+                    <a
+                      href={guide.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View documentation
+                    </a>
+                  )}
+                </div>
+              </details>
             )}
 
             {/* Subdomain guidance */}
             {guide && guide.subdomainExample && (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-1">
-                <p className="text-xs font-medium text-foreground">Subdomain recommended</p>
-                <p className="text-xs text-muted-foreground">
-                  Use a subdomain like <span className="font-mono text-foreground">{guide.subdomainExample}</span> instead
-                  of your root domain. This prevents DKIM record conflicts when using multiple providers
-                  and keeps your domain reputation isolated per provider.
-                </p>
+              <div className="flex items-start gap-2 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-2.5 dark:bg-amber-950/40 dark:border-amber-800">
+                <Lightbulb className="h-3.5 w-3.5 text-[#B45309] dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="text-[11px] font-medium text-[#92400E] dark:text-amber-300">Use a subdomain</p>
+                  <p className="text-[11px] text-[#92400E]/80 dark:text-amber-300/80 leading-relaxed">
+                    Verify <span className="font-mono">{guide.subdomainExample}</span> instead of your root domain to avoid DKIM conflicts when using multiple providers.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -398,18 +429,34 @@ export function ConnectProviderDialog({ open, onOpenChange }: Props) {
                 </div>
               )}
 
-              {error && <p className="text-xs text-destructive">{error}</p>}
+              {error && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
+                  <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-xs text-destructive">{error}</p>
+                </div>
+              )}
 
-              <div className="flex justify-between pt-1">
-                <Button type="button" variant="ghost" size="sm" onClick={() => { setStep("select"); setVerifyResult(null) }}>
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/60 -mx-5 px-5 -mb-4 pb-4 mt-1 bg-muted/20">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => { setStep("select"); setVerifyResult(null) }}
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   Back
                 </Button>
                 <div className="flex gap-2">
                   <Button type="button" variant="ghost" size="sm" onClick={() => handleClose(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" size="sm" disabled={mutation.isPending}>
-                    {mutation.isPending ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Verifying…</> : "Connect & verify"}
+                  <Button type="submit" size="sm" disabled={mutation.isPending} className="gap-1.5">
+                    {mutation.isPending ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying…</>
+                    ) : (
+                      <><ShieldCheck className="h-3.5 w-3.5" /> Connect & verify</>
+                    )}
                   </Button>
                 </div>
               </div>

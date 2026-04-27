@@ -85,7 +85,10 @@ Rails.application.routes.draw do
         end
       end
       resources :routing_rules,        only: [:index, :show, :create, :update, :destroy]
-      resources :emails,               only: [:index, :show, :create]
+      resources :emails,               only: [:index, :show, :create] do
+        member     { post :reconcile }
+        collection { post :reconcile_stale }
+      end
       resources :email_templates,       only: [:index, :show, :create, :update, :destroy] do
         member do
           post :preview

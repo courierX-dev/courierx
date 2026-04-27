@@ -239,14 +239,19 @@ export function WebhookSetupSection({ conn }: { conn: ProviderConnection }) {
       <p className="text-xs text-muted-foreground leading-relaxed">{copy.description}</p>
 
       {wh.url && wh.status === "auto" && (
-        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/20 px-2 py-1.5">
+        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/20 px-2 py-1.5 min-w-0">
           <span className="text-[11px] text-muted-foreground shrink-0">Endpoint</span>
-          <code className="flex-1 truncate font-mono text-[11px]">{wh.url}</code>
+          <code
+            className="flex-1 min-w-0 truncate font-mono text-[11px]"
+            title={wh.url}
+          >
+            {wh.url}
+          </code>
           <button
             type="button"
             onClick={() => handleCopy(wh.url!)}
             aria-label="Copy webhook URL"
-            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+            className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
           </button>

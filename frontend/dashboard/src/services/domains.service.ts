@@ -10,6 +10,14 @@ export interface DnsRecord {
   verified?: boolean
 }
 
+export interface SpfAdvisor {
+  spf_record: string | null
+  lookup_count: number
+  level: "ok" | "warning" | "danger" | string
+  message: string | null
+  includes: string[]
+}
+
 export interface DomainProviderVerification {
   provider_connection_id: string
   provider: "sendgrid" | "mailgun" | "aws_ses" | "resend" | "postmark" | "smtp" | string
@@ -37,6 +45,9 @@ export interface Domain {
   // One entry per (domain × provider connection). Multi-account-aware:
   // distinct rows for "Resend (Production)" and "Resend (Marketing)".
   providers: DomainProviderVerification[]
+  // SPF lookup-count advisor — warns the tenant before they hit RFC 7208's
+  // 10-lookup cap (which silently breaks SPF authentication).
+  spf_advisor?: SpfAdvisor
 }
 
 export const domainsService = {

@@ -415,6 +415,26 @@ export default function DomainsPage() {
           </DialogHeader>
           {selected && (
             <div className="space-y-6 mt-2">
+              {/* SPF lookup-count advisor — only renders when level != ok */}
+              {selected.spf_advisor && selected.spf_advisor.level !== "ok" && (
+                <div
+                  className={cn(
+                    "rounded-md border px-3 py-2.5 space-y-1 text-xs",
+                    selected.spf_advisor.level === "danger"
+                      ? "border-destructive/40 bg-destructive/10 text-destructive-foreground"
+                      : "border-amber-500/40 bg-amber-500/10",
+                  )}
+                  role="alert"
+                >
+                  <p className="font-medium">
+                    SPF lookup count: ~{selected.spf_advisor.lookup_count} of 10
+                  </p>
+                  {selected.spf_advisor.message && (
+                    <p className="text-muted-foreground">{selected.spf_advisor.message}</p>
+                  )}
+                </div>
+              )}
+
               {/* DNS records section */}
               <section className="space-y-2">
                 <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

@@ -6,7 +6,9 @@ module Api
       before_action :set_rule, only: [:show, :update, :destroy]
 
       def index
-        rules = current_tenant.routing_rules.order(created_at: :desc)
+        rules = current_tenant.routing_rules
+                              .includes(routing_rule_providers: :provider_connection)
+                              .order(created_at: :desc)
         render json: rules.map { |r| rule_json(r) }
       end
 
@@ -47,11 +49,33 @@ module Api
       end
 
       def rule_json(r)
+        # Connections are sorted by their join-table priority — the order the
+        # resolver walks them. Surfacing this is what would have made today's
+        # "rule has no providers" debugging trivial: just look at the JSON.
+        connections = r.routing_rule_providers
+                       .sort_by { |rrp| rrp.priority }
+                       .map { |rrp|
+                         conn = rrp.provider_connection
+                         next unless conn
+                         {
+                           routing_rule_provider_id: rrp.id,
+                           provider_connection_id:   conn.id,
+                           provider:                 conn.provider,
+                           display_name:             conn.display_name,
+                           priority:                 rrp.priority,
+                           weight:                   rrp.weight,
+                           failover_only:            rrp.failover_only,
+                           status:                   conn.status
+                         }
+                       }.compact
+
         {
           id: r.id, name: r.name, strategy: r.strategy,
           is_default: r.is_default, is_active: r.is_active,
           match_from_domain: r.match_from_domain, match_tag: r.match_tag,
-          created_at: r.created_at
+          created_at: r.created_at,
+          connections: connections,
+          connection_count: connections.size
         }
       end
     end

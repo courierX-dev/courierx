@@ -42,6 +42,39 @@ module Api
         )
       end
 
+      # POST /api/v1/emails/:id/reconcile
+      # Re-runs reconciliation for a single email synchronously and returns
+      # the resulting action. Useful for a tenant nudging a single phantom
+      # "Sending" record without waiting for the next sweep.
+      def reconcile
+        email = current_tenant.emails.find(params[:id])
+        result = EmailReconciliationService.call(email: email)
+        render json: {
+          email:  email_json(email.reload),
+          action: result.action,
+          detail: result.detail
+        }
+      end
+
+      # POST /api/v1/emails/reconcile_stale
+      # Sweeps this tenant's stuck emails and enqueues reconciliation jobs.
+      # Tenant-scoped — never touches other tenants. Returns the count and a
+      # short list of the email ids that were enqueued.
+      def reconcile_stale
+        scope = current_tenant.emails
+                              .where(status: %w[queued sent])
+                              .where("created_at < ?", EmailReconciliationService::STALE_QUEUED_THRESHOLD.ago)
+
+        ids = scope.pluck(:id)
+        ids.each { |id| EmailReconciliationJob.perform_async(id) }
+
+        render json: {
+          enqueued_count: ids.size,
+          email_ids:      ids.first(100),
+          truncated:      ids.size > 100
+        }
+      end
+
       # POST /api/v1/emails
       def create
         dispatch_params = normalized_email_params

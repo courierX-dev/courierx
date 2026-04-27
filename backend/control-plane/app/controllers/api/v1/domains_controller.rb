@@ -95,6 +95,11 @@ module Api
         # provider record ordering.
         unified = unified.partition { |r| r[:name] == ownership_record[:name] }.flatten(1)
 
+        # SPF advisor — surfaces the merged include chain + warns the tenant
+        # before they hit the RFC 7208 10-lookup cap (which silently breaks
+        # SPF authentication when exceeded).
+        spf_advisor = SpfAdvisor.call(dpvs.map(&:provider).uniq)
+
         {
           id:                 d.id,
           domain:             d.domain,
@@ -105,6 +110,7 @@ module Api
           dkim_selector:      d.dkim_selector,
           created_at:         d.created_at,
           dns_records:        unified,
+          spf_advisor:        spf_advisor.to_h,
           providers:          dpvs.map { |dpv|
             conn = dpv.provider_connection
             {
