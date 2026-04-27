@@ -69,8 +69,13 @@ function ProviderCard({
   const isError = conn.status === "degraded" || conn.status === "banned"
   const connected = conn.status === "active"
   const iconStatus = connected ? "active" : isError ? "error" : "inactive"
-  const successPct = conn.success_rate != null ? `${(conn.success_rate * 100).toFixed(1)}%` : "\u2014"
-  const latency = conn.avg_latency_ms != null ? `${conn.avg_latency_ms} ms` : "\u2014"
+  const hasSendData = conn.sent_count + conn.failed_count > 0
+  const successPct =
+    conn.success_rate != null && hasSendData
+      ? `${(conn.success_rate * 100).toFixed(1)}%`
+      : "\u2014"
+  const latency =
+    conn.avg_latency_ms != null && hasSendData ? `${conn.avg_latency_ms} ms` : "\u2014"
   const lastCheck = conn.last_health_check_at
     ? new Date(conn.last_health_check_at).toLocaleString()
     : "Never checked"

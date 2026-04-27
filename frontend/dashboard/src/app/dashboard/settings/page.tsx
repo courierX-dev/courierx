@@ -34,14 +34,22 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState("")
   const [isDeleting, setIsDeleting]       = useState(false)
   const [notifications, setNotifications] = useState<Record<string, boolean>>({})
-  const [notifInit, setNotifInit]         = useState(false)
+  const [tracking, setTracking]           = useState<{ opens: boolean; clicks: boolean }>({ opens: true, clicks: true })
+  const [settingsInit, setSettingsInit]   = useState(false)
 
-  // Initialize notification state from tenant data once loaded
-  if (tenant && !notifInit) {
+  // Initialize stateful settings from tenant data once loaded.
+  // Tracking defaults to ON — tenants opt out, not in. We treat anything
+  // other than an explicit `false` as enabled so a missing key reads as on.
+  if (tenant && !settingsInit) {
     const settings = (tenant.settings || {}) as Record<string, unknown>
-    const notifs = (settings.notifications || {}) as Record<string, boolean>
+    const notifs   = (settings.notifications || {}) as Record<string, boolean>
+    const track    = (settings.tracking || {}) as Record<string, unknown>
     setNotifications(notifs)
-    setNotifInit(true)
+    setTracking({
+      opens:  track.opens  !== false,
+      clicks: track.clicks !== false,
+    })
+    setSettingsInit(true)
   }
 
   async function toggleNotification(id: string, checked: boolean) {
@@ -57,6 +65,22 @@ export default function SettingsPage() {
     } catch {
       toast.error("Failed to update preferences")
       setNotifications(prev)
+    }
+  }
+
+  async function toggleTracking(key: "opens" | "clicks", checked: boolean) {
+    const prev = { ...tracking }
+    const updated = { ...tracking, [key]: checked }
+    setTracking(updated)
+
+    try {
+      await api.patch<{ tenant: Tenant }>("/api/v1/auth/me", {
+        settings: { tracking: updated }
+      })
+      toast.success("Tracking preferences updated")
+    } catch {
+      toast.error("Failed to update tracking")
+      setTracking(prev)
     }
   }
 
@@ -146,6 +170,42 @@ export default function SettingsPage() {
               </label>
             )
           })}
+        </div>
+      </section>
+
+      {/* Email tracking */}
+      <section>
+        <h2 className="text-sm font-semibold mb-1 pb-2 border-b border-border">Email tracking</h2>
+        <p className="mt-2 text-xs text-muted-foreground mb-4">
+          First-party open and click tracking augments provider-native tracking. Disable per category if your recipients consider tracking pixels a privacy concern. A per-send <span className="font-mono">metadata.track_opens</span> / <span className="font-mono">metadata.track_clicks</span> field overrides these defaults for transactional flows.
+        </p>
+        <div className="space-y-3">
+          <label className="flex items-center justify-between gap-4 py-1 cursor-pointer">
+            <div>
+              <p className="text-sm">Open tracking</p>
+              <p className="text-xs text-muted-foreground">Inject a 1×1 pixel into HTML emails to record opens.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={tracking.opens}
+              onChange={(e) => toggleTracking("opens", e.target.checked)}
+              className="h-4 w-4 rounded border-border accent-primary"
+              aria-label="Toggle open tracking"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-4 py-1 cursor-pointer">
+            <div>
+              <p className="text-sm">Click tracking</p>
+              <p className="text-xs text-muted-foreground">Rewrite outbound links through a redirector to record clicks.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={tracking.clicks}
+              onChange={(e) => toggleTracking("clicks", e.target.checked)}
+              className="h-4 w-4 rounded border-border accent-primary"
+              aria-label="Toggle click tracking"
+            />
+          </label>
         </div>
       </section>
 

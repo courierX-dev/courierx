@@ -29,6 +29,9 @@ export interface ProviderConnection {
   priority: number
   success_rate: number | null
   avg_latency_ms: number | null
+  sent_count: number
+  failed_count: number
+  stats_window_hours: number
   consecutive_failures: number
   last_health_check_at: string | null
   region: string | null
