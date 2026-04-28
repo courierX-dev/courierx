@@ -116,6 +116,11 @@ Rails.application.routes.draw do
         end
       end
       resources :mcp_connections,      only: [:index, :show, :create, :update, :destroy]
+
+      # ── MCP server (JSON-RPC 2.0) ──
+      # Authenticated via `Authorization: Bearer <client_id>:<client_secret>`
+      # against an McpConnection — separate from the tenant JWT/API-key path.
+      post "mcp",     to: "mcp#handle"
       resources :usage_stats,          only: [:index]
 
       # ── Super Admin Portal ──

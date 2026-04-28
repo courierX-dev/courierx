@@ -20,6 +20,7 @@ import {
   CreditCard,
   Mail,
   FileText,
+  Bot,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/auth.store"
@@ -52,6 +53,7 @@ const NAV = [
     section: "Developer",
     items: [
       { id: "api-keys", label: "API keys", href: "/dashboard/api-keys", icon: Key },
+      { id: "mcp",      label: "MCP",      href: "/dashboard/mcp",      icon: Bot },
       { id: "webhooks", label: "Webhooks", href: "/dashboard/webhooks", icon: Radio },
       { id: "team", label: "Team", href: "/dashboard/team", icon: Users },
     ],

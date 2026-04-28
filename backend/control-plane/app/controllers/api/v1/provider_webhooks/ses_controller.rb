@@ -37,6 +37,16 @@ module Api
 
         private
 
+        # Maximum age of an SNS message we'll accept. SNS retries legitimate
+        # deliveries (failure → exponential backoff → eventually succeed),
+        # but in practice successful retries arrive within seconds-to-minutes.
+        # ProviderEventProcessor is *not* idempotent on (message_id, event_type),
+        # so without a freshness window a captured signed payload could be
+        # replayed forever and re-fire downstream tenant webhooks for the same
+        # delivery. 1 hour gives us replay protection without rejecting
+        # genuine SNS retry traffic.
+        SNS_MAX_AGE_SECONDS = 3600
+
         def verify_sns_signature
           # SECURITY: Always verify SNS signatures — no development bypass.
           # Previously this skipped verification in development, which allowed SSRF
@@ -63,6 +73,25 @@ module Api
             unless cert.public_key.verify(OpenSSL::Digest::SHA1.new, signature, string_to_sign)
               Rails.logger.warn("[SES Webhook] SNS signature verification failed")
               head :unauthorized and return
+            end
+
+            # Replay protection. The Timestamp field is part of the signed
+            # payload above, so it can't be tampered with — but a captured
+            # legitimately-signed message could be replayed indefinitely
+            # without this check. Match the freshness model of our other
+            # webhook controllers.
+            timestamp = body["Timestamp"]
+            if timestamp.present?
+              begin
+                ts_age = Time.now - Time.iso8601(timestamp.to_s)
+                if ts_age.abs > SNS_MAX_AGE_SECONDS
+                  Rails.logger.warn("[SES Webhook] Stale SNS timestamp (#{ts_age.to_i}s) — rejecting")
+                  head :unauthorized and return
+                end
+              rescue ArgumentError
+                Rails.logger.warn("[SES Webhook] Unparseable SNS Timestamp: #{timestamp.inspect}")
+                head :unauthorized and return
+              end
             end
           rescue => e
             Rails.logger.warn("[SES Webhook] Signature verification error: #{e.message}")
