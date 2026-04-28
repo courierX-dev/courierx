@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_27_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_28_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -163,6 +163,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_000001) do
   end
 
   create_table "mcp_audit_logs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "ai_model_name"
     t.float "confidence_score"
     t.datetime "created_at", default: -> { "now()" }, null: false
     t.integer "duration_ms"
@@ -172,7 +173,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_000001) do
     t.jsonb "input_params", default: {}, null: false
     t.string "ip_address"
     t.uuid "mcp_connection_id", null: false
-    t.string "model_name"
     t.text "output_summary"
     t.string "prompt_hash"
     t.boolean "success", default: false, null: false

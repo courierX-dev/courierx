@@ -65,10 +65,9 @@ class McpToolDispatcher
       duration_ms:       duration_ms,
       ip_address:        @ip_address
     )
-
     result
   rescue => e
-    Rails.logger.error("[MCP] audit log write failed: #{e.message}")
+    Rails.logger.error("[MCP] audit log write failed: #{e.class}: #{e.message}")
     result
   end
 
